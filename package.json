@@ -2,7 +2,7 @@
   "name": "nlauncher",
   "productName": "NLauncher",
   "version": "0.2.4",
-  "description": "NLauncher от NeoDev — минималистичный Minecraft-лаунчер: лицензия и офлайн, сборки, моды, сервера.",
+  "description": "NLauncher — Minecraft-лаунчер от NeoDev",
   "main": "src/main.js",
   "author": {
     "name": "NeoDev",
