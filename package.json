@@ -12,7 +12,8 @@
     "dist": "electron-builder",
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",
-    "dist:mac": "electron-builder --mac"
+    "dist:mac": "electron-builder --mac",
+    "test:e2e": "node test/e2e.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
