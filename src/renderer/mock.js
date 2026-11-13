@@ -11,7 +11,7 @@ if (!window.api) {
   const listeners = {};
   window.api = {
     win: { min() {}, max() {}, close() {}, show() {} },
-    openUrl: async () => {}, openPath: async () => {},
+    openUrl: async () => {}, openPath: async () => {}, copy: () => {},
     info: async () => ({ config: { brand: 'NLauncher', company: 'NeoDev', tagline: 'Играй красиво.', featuredServers: [{ name: 'Hypixel', address: 'mc.hypixel.net', tag: 'Мини-игры' }, { name: '2b2t', address: '2b2t.org', tag: 'Анархия' }] }, version: '0.1.0', platform: 'win32', totalMemory: 16384, root: 'C:\\Users\\you\\AppData\\Roaming\\.crimson' }),
     settings: { get: async () => settings, set: async (p) => (settings = { ...settings, ...p }) },
     accounts: { list: async () => accounts, offline: async (n) => { accounts.list.push({ id: 'o:' + n, type: 'offline', name: n, uuid: n }); accounts.active = 'o:' + n; return accounts; }, microsoft: async () => { throw new Error('Только в приложении'); }, remove: async (id) => { accounts.list = accounts.list.filter((a) => a.id !== id); return accounts; }, select: async (id) => { accounts.active = id; return accounts; } },

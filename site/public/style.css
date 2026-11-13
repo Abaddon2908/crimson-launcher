@@ -49,7 +49,7 @@ main.wide { width: min(1400px, calc(100% - 40px)); }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand b { display: block; font: 600 14px var(--display); letter-spacing: .02em; }
 .brand small { display: block; font-size: 11px; color: var(--dim); letter-spacing: .14em; text-transform: uppercase; }
-.logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font: 700 16px var(--display); color: #fff; background: linear-gradient(140deg, #b0525c, #6a2730); }
+.logo { width: 36px; height: 36px; border-radius: 10px; display: block; }
 .nav { display: flex; gap: 4px; }
 .nav a { padding: 8px 14px; border-radius: 10px; color: var(--muted); font-weight: 600; transition: .2s; }
 .nav a:hover { color: var(--text); background: var(--hover); }

@@ -98,6 +98,7 @@ function accountModal(tab = 'ms') {
     ${list ? `<div class="acc-list">${list}</div>` : ''}
   `, (m) => {
     $$('.acc-tabs button', m).forEach((b) => b.onclick = () => {
+      tab = b.dataset.t;
       $$('.acc-tabs button', m).forEach((x) => x.classList.toggle('active', x === b));
       $$('[data-pane]', m).forEach((p) => (p.hidden = p.dataset.pane !== b.dataset.t));
       if (b.dataset.t === 'off') $('#offName', m).focus();
@@ -201,6 +202,8 @@ async function instanceModal(edit = null) {
   if (!state.mc) state.mc = await safe(() => api.versions.mc());
   if (!state.mc) return;
   const f = { name: edit?.name || '', mc: edit?.mc || state.mc.latest.release, loader: edit?.loader || 'vanilla', loaderVersion: edit?.loaderVersion || '', snapshots: false, memoryMax: edit?.memoryMax || '' };
+  // сборка на снапшоте/старой версии — сразу показываем все версии, иначе версия молча сменится на релиз
+  f.snapshots = Boolean(edit && state.mc.versions.find((v) => v.id === edit.mc)?.type !== 'release');
 
   openModal(`
     <h3>${edit ? 'Изменить сборку' : 'Новая сборка'}</h3>
@@ -212,7 +215,7 @@ async function instanceModal(edit = null) {
       </div>
     </div>
     <label class="field"><span>Версия Minecraft</span><select class="select" id="iMc"></select></label>
-    <label class="check-row"><input type="checkbox" id="iSnap" /> Показывать снапшоты и старые бета-версии</label>
+    <label class="check-row"><input type="checkbox" id="iSnap" ${f.snapshots ? 'checked' : ''} /> Показывать снапшоты и старые бета-версии</label>
     <label class="field" id="iLvWrap"><span>Версия загрузчика</span><select class="select" id="iLv"></select></label>
     <label class="field"><span>ОЗУ для сборки, МБ (пусто — из настроек)</span><input class="input" id="iMem" type="number" step="256" placeholder="${state.settings.memoryMax}" value="${esc(f.memoryMax)}" /></label>
     <div class="modal-actions"><button class="btn ghost" id="iCancel">Отмена</button><button class="btn primary" id="iSave">${edit ? 'Сохранить' : 'Создать'}</button></div>
@@ -257,6 +260,7 @@ async function instanceModal(edit = null) {
 }
 
 /* ---------------- запуск ---------------- */
+const TASKS = { assets: 'ресурсы игры', 'assets-copy': 'ресурсы игры', natives: 'нативные библиотеки', classes: 'библиотеки', 'version-jar': 'клиент' };
 const STAGES = { auth: 'Авторизация', meta: 'Метаданные', java: 'Загрузка Java', loader: 'Модлоадер', download: 'Загрузка файлов', started: 'Запуск', running: 'В игре' };
 function setProgress(task, loaded, total) {
   $('#progress').classList.add('show');
@@ -304,7 +308,8 @@ api.game.onEvent((e) => {
     setTimeout(() => state.running && $('#progress').classList.remove('show'), 2500);
     return;
   }
-  const label = e.task ? `${STAGES[e.stage] || ''}${STAGES[e.stage] ? ' · ' : ''}${e.task}` : STAGES[e.stage];
+  const task = TASKS[e.task] || e.task;
+  const label = task ? `${STAGES[e.stage] || ''}${STAGES[e.stage] ? ' · ' : ''}${task}` : STAGES[e.stage];
   setProgress(label, e.loaded || 0, e.total || 0);
 });
 
@@ -365,7 +370,7 @@ function bindServers(root) {
   hydrateIcons(root);
   $$('.srv', root).forEach((el) => el.addEventListener('click', async (e) => {
     const a = e.target.closest('[data-a]')?.dataset.a; const addr = el.dataset.addr;
-    if (a === 'copy') { navigator.clipboard.writeText(addr); toast('IP скопирован'); }
+    if (a === 'copy') { api.copy(addr); toast(`IP скопирован: ${addr}`); }
     if (a === 'rm') {
       state.settings.servers = state.settings.servers.filter((s) => s.address !== addr);
       await api.settings.set({ servers: state.settings.servers }); renderServers(); renderHomeServers();
@@ -416,7 +421,9 @@ let modsReq = 0;
 async function renderMods(append = false) {
   const sel = $('#modsInstance');
   if (!state.mods.instance || !state.instances.some((i) => i.id === state.mods.instance)) state.mods.instance = state.current?.id;
-  sel.innerHTML = state.instances.map((i) => `<option value="${i.id}" ${i.id === state.mods.instance ? 'selected' : ''}>${esc(i.name)} — ${LOADERS[i.loader]} ${i.mc}</option>`).join('');
+  // версию дописываем, только если её нет в названии сборки (иначе «Fabric 1.21.1 — Fabric 1.21.1»)
+  const label = (i) => (i.name.includes(i.mc) ? i.name : `${i.name} · ${LOADERS[i.loader]} ${i.mc}`);
+  sel.innerHTML = state.instances.map((i) => `<option value="${i.id}" ${i.id === state.mods.instance ? 'selected' : ''}>${esc(label(i))}</option>`).join('');
   const list = $('#modList');
   const inst = state.instances.find((i) => i.id === state.mods.instance);
   if (!inst) { list.innerHTML = '<div class="empty"><b>Нет сборок</b>Создайте сборку, чтобы ставить моды.</div>'; return; }
@@ -492,7 +499,18 @@ function bindSettings() {
   mem.onchange = () => save({ memoryMax: Number(mem.value) });
 
   const bindChk = (id, key, after) => { const el = $(id); el.checked = !!s[key]; el.onchange = () => { save({ [key]: el.checked }); after && after(el.checked); }; };
-  const bindTxt = (id, key, num) => { const el = $(id); el.value = s[key] ?? ''; el.onchange = () => save({ [key]: num ? Number(el.value) || s[key] : el.value.trim() }); };
+  const bindTxt = (id, key, num) => {
+    const el = $(id); el.value = s[key] ?? '';
+    el.onchange = () => {
+      if (num) {
+        const n = Math.round(Number(el.value));
+        if (!(n >= 100 && n <= 10000)) { el.value = s[key]; return toast('Введите число от 100 до 10000', 'warn'); }
+        el.value = n;
+        return save({ [key]: n });
+      }
+      save({ [key]: el.value.trim() });
+    };
+  };
   bindChk('#sAutoJava', 'autoJava', (v) => ($('#sJava').disabled = v)); $('#sJava').disabled = s.autoJava;
   bindTxt('#sJava', 'javaPath'); bindTxt('#sJvm', 'jvmArgs');
   bindTxt('#sW', 'width', true); bindTxt('#sH', 'height', true);
@@ -503,10 +521,15 @@ function bindSettings() {
   $('#about').textContent = `${state.info.config.brand} Launcher v${state.info.version} · ${state.info.platform}`;
 }
 let saveTimer;
+let pendingSave = {};
 function save(p) {
   Object.assign(state.settings, p);
+  Object.assign(pendingSave, p);
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => api.settings.set(p).then(() => toast('Настройки сохранены')), 150);
+  saveTimer = setTimeout(() => {
+    const patch = pendingSave; pendingSave = {};
+    safe(() => api.settings.set(patch)).then((r) => r && toast('Настройки сохранены'));
+  }, 300);
 }
 
 /* ---------------- старт ---------------- */

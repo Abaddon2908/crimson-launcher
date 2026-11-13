@@ -48,13 +48,17 @@
     render();
     document.body.append(menu);
     const r = dd.wrap.getBoundingClientRect();
-    const below = window.innerHeight - r.bottom - 12;
-    const h = Math.min(320, Math.max(below, r.top - 12));
-    menu.style.left = r.left + 'px';
-    menu.style.width = Math.max(r.width, 200) + 'px';
-    menu.style.maxHeight = h + 'px';
-    if (below >= Math.min(220, menu.scrollHeight)) menu.style.top = r.bottom + 6 + 'px';
-    else menu.style.bottom = window.innerHeight - r.top + 6 + 'px';
+    const below = window.innerHeight - r.bottom - 14;
+    const above = r.top - 14;
+    const need = Math.min(320, menu.scrollHeight);
+    // вниз, если там хватает места (или там просторнее, чем сверху); высота — по выбранной стороне
+    const down = below >= need || below >= above;
+    const width = Math.max(r.width, 200);
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8)) + 'px';
+    menu.style.width = width + 'px';
+    menu.style.maxHeight = Math.max(120, Math.min(320, down ? below : above)) + 'px';
+    if (down) menu.style.top = r.bottom + 6 + 'px';
+    else { menu.style.bottom = window.innerHeight - r.top + 6 + 'px'; menu.style.transformOrigin = 'bottom'; }
     requestAnimationFrame(() => menu.classList.add('show'));
     dd.wrap.classList.add('open');
     open = { wrap: dd.wrap, menu };

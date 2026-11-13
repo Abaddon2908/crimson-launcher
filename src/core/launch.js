@@ -87,7 +87,7 @@ async function start(instanceId, emit, server = null) {
   running = { client, instanceId, started: Date.now() };
 
   client.on('progress', (e) => emit({ stage: 'download', task: e.type, loaded: e.task, total: e.total }));
-  client.on('download-status', (e) => emit({ stage: 'download', task: e.name, loaded: e.current, total: e.total }));
+  // download-status (прогресс отдельного файла) не передаём: иначе полоса скачет между файлом и общим прогрессом
   client.on('debug', (d) => emit({ log: String(d) }));
   client.on('data', (d) => {
     const line = String(d);

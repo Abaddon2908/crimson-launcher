@@ -50,7 +50,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '' }
   <div class="bg" aria-hidden="true"><div class="bg-img"></div></div>
   <header class="top">
     <div class="wrap top-in">
-      <a href="/" class="brand"><span class="logo">N</span><span><b>${site}</b><small>by NeoDev</small></span></a>
+      <a href="/" class="brand"><img class="logo" src="/assets/logo-mark.svg" alt="" /><span><b>${site}</b><small>by NeoDev</small></span></a>
       <nav class="nav">
         ${nav('/', 'Топ серверов')}
         ${nav('/ads', 'Реклама')}

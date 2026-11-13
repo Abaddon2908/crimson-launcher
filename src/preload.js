@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, clipboard } = require('electron');
 
 const call = async (ch, ...args) => {
   const r = await ipcRenderer.invoke(ch, ...args);
@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   openUrl: (u) => call('open:url', u),
   openPath: (p) => call('open:path', p),
+  copy: (text) => clipboard.writeText(String(text)),
   info: () => call('app:info'),
   settings: { get: () => call('settings:get'), set: (p) => call('settings:set', p) },
   accounts: {
