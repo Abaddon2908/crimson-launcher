@@ -1,0 +1,33 @@
+name: Site (Docker build + smoke test)
+
+on:
+  push:
+    paths: ['site/**', '.github/workflows/site.yml']
+  workflow_dispatch:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t neodev-monitoring .
+      - name: Run and check pages
+        run: |
+          docker run -d --name site -p 3000:3000 -e ADMIN_EMAIL=ci@test.local -e ADMIN_PASSWORD=ci-password-123 neodev-monitoring
+          for i in $(seq 1 30); do curl -sf localhost:3000/ >/dev/null && break; sleep 1; done
+          for p in / /ads /launcher /login /register /api/launcher/feed.json /api/servers; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" localhost:3000$p); echo "$code $p"; test "$code" = 200
+          done
+          docker exec site node --no-warnings scripts/demo-seed.js
+          sleep 8
+          curl -sf localhost:3000/api/servers | head -c 400; echo
+          curl -sf localhost:3000/ | grep -q "SkyRealm"
+      - name: Ping real server
+        run: |
+          docker exec site node --no-warnings -e "require('./src/pinger').ping('mc.hypixel.net').then(r => { console.log(r.online, r.players, r.ping); process.exit(r.online ? 0 : 1) })"
+      - if: always()
+        run: docker logs site

@@ -1,6 +1,6 @@
 # NLauncher
 
-Minecraft-лаунчер от **NeoDev**.
+Minecraft-лаунчер от **NeoDev**. Сайт-мониторинг с продажей рекламы и админкой лежит в [`site/`](site/README.md).
 
 **[⬇ Скачать для Windows](https://github.com/Abaddon2908/crimson-launcher/releases/latest)**
 

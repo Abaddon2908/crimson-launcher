@@ -326,7 +326,8 @@ async function loadFeed() {
 
 function allServers() {
   const promoted = (state.feed?.promoted || []).map((s) => ({ ...s, ad: true, group: 'promo' }));
-  const featured = (state.info?.config.featuredServers || []).map((s) => ({ ...s, group: 'top' }));
+  // топ берём с сайта мониторинга (feed.top), если он подключён; иначе — из config.json
+  const featured = ((state.feed?.top?.length ? state.feed.top : state.info?.config.featuredServers) || []).map((s) => ({ ...s, group: 'top' }));
   const mine = (state.settings.servers || []).map((s) => ({ ...s, group: 'mine' }));
   return { promoted, featured, mine };
 }
