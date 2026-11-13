@@ -5,7 +5,7 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtNum = (n) => (n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n));
-const fmtTime = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h} ч ${m} мин` : `${m} мин`; };
+const fmtTime = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h} ч ${m} м` : `${m} мин`; };
 const LOADERS = { vanilla: 'Vanilla', fabric: 'Fabric', quilt: 'Quilt', forge: 'Forge' };
 const LOADER_ABBR = { vanilla: 'V', fabric: 'FB', quilt: 'Q', forge: 'FG' };
 
@@ -173,9 +173,8 @@ function renderInstances() {
           </div>
         </div>
       </div>
-    </div>`).join('') + `<button class="inst-card inst-new" id="instNewCard"><div>${icon('plus')}Новая сборка</div></button>`;
+    </div>`).join('') || `<div class="empty inst-empty"><b>Пока нет сборок</b>Нажмите «Новая сборка», чтобы выбрать версию и модлоадер.</div>`;
   hydrateIcons(g);
-  $('#instNewCard').onclick = () => instanceModal();
   $$('.inst-card[data-id]', g).forEach((card) => card.addEventListener('click', async (e) => {
     const id = card.dataset.id;
     const act = e.target.closest('[data-act]')?.dataset.act;
