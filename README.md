@@ -1,8 +1,10 @@
-# Crimson Launcher
+# NLauncher
+
+Minecraft-лаунчер от **NeoDev**.
 
 **[⬇ Скачать для Windows](https://github.com/Abaddon2908/crimson-launcher/releases/latest)**
 
-Минималистичный Minecraft-лаунчер в тёмно-красном стиле: стекло, блюры, градиенты, плавные анимации.
+Минималистичный Minecraft-лаунчер в спокойной винной палитре: матовое стекло, блюры, блочные пейзажи на фоне, плавные анимации.
 
 ## Возможности
 
@@ -26,7 +28,7 @@ npm run dev        # с DevTools
 npm run dist:win   # сборка установщика (.exe), также dist:linux / dist:mac
 ```
 
-Нужен Node.js 18+. Данные лежат в `%APPDATA%/.crimson` (Windows), `~/.config/.crimson` (Linux) или `~/Library/Application Support/.crimson` (macOS).
+Нужен Node.js 18+. Данные лежат в `%APPDATA%/.nlauncher` (Windows), `~/.config/.nlauncher` (Linux) или `~/Library/Application Support/.nlauncher` (macOS).
 
 Чтобы посмотреть интерфейс без Electron, откройте `src/renderer/index.html` в браузере. Подключится мок-API из `mock.js`.
 
@@ -34,7 +36,8 @@ npm run dist:win   # сборка установщика (.exe), также dist
 
 ```json
 {
-  "brand": "CRIMSON",
+  "brand": "NLauncher",
+  "company": "NeoDev",
   "tagline": "Играй красиво.",
   "site": "https://your-site.ru",
   "feedUrl": "https://your-site.ru/api/launcher/feed.json",
@@ -43,6 +46,7 @@ npm run dist:win   # сборка установщика (.exe), также dist
 ```
 
 Цвета задаются CSS-переменными в начале `src/renderer/styles.css` (`--accent`, `--accent-2`, `--accent-deep` …).
+Фоновые картинки лежат в `src/renderer/assets/` (`bg-main.jpg`, `bg-banner.jpg`, `bg-night.jpg`, `bg-forest.jpg`). Замените их своими файлами с теми же именами.
 
 ## Подключение сайта (мониторинг и реклама)
 

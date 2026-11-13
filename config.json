@@ -1,5 +1,6 @@
 {
-  "brand": "CRIMSON",
+  "brand": "NLauncher",
+  "company": "NeoDev",
   "tagline": "Играй красиво.",
   "site": "https://example.com",
   "feedUrl": "https://example.com/api/launcher/feed.json",

@@ -12,7 +12,7 @@ if (!window.api) {
   window.api = {
     win: { min() {}, max() {}, close() {}, show() {} },
     openUrl: async () => {}, openPath: async () => {},
-    info: async () => ({ config: { brand: 'CRIMSON', tagline: 'Играй красиво.', featuredServers: [{ name: 'Hypixel', address: 'mc.hypixel.net', tag: 'Мини-игры' }, { name: '2b2t', address: '2b2t.org', tag: 'Анархия' }] }, version: '0.1.0', platform: 'win32', totalMemory: 16384, root: 'C:\\Users\\you\\AppData\\Roaming\\.crimson' }),
+    info: async () => ({ config: { brand: 'NLauncher', company: 'NeoDev', tagline: 'Играй красиво.', featuredServers: [{ name: 'Hypixel', address: 'mc.hypixel.net', tag: 'Мини-игры' }, { name: '2b2t', address: '2b2t.org', tag: 'Анархия' }] }, version: '0.1.0', platform: 'win32', totalMemory: 16384, root: 'C:\\Users\\you\\AppData\\Roaming\\.crimson' }),
     settings: { get: async () => settings, set: async (p) => (settings = { ...settings, ...p }) },
     accounts: { list: async () => accounts, offline: async (n) => { accounts.list.push({ id: 'o:' + n, type: 'offline', name: n, uuid: n }); accounts.active = 'o:' + n; return accounts; }, microsoft: async () => { throw new Error('Только в приложении'); }, remove: async (id) => { accounts.list = accounts.list.filter((a) => a.id !== id); return accounts; }, select: async (id) => { accounts.active = id; return accounts; } },
     versions: { mc: async () => ({ latest: { release: '1.21.4' }, versions: ['1.21.4', '1.21.3', '1.21.1', '1.20.6', '1.20.1', '1.19.4', '1.18.2', '1.16.5', '1.12.2'].map((id) => ({ id, type: 'release' })) }), loaders: async () => [{ id: '0.16.9', stable: true }, { id: '0.16.8', stable: true }] },

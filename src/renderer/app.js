@@ -38,7 +38,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 
 const avatarUrl = (acc) => (acc ? `https://mc-heads.net/avatar/${encodeURIComponent(acc.type === 'microsoft' ? acc.uuid : acc.name)}/64` : 'https://mc-heads.net/avatar/MHF_Steve/64');
 const instIcon = (i, cls = '') => `<span class="inst-icon ${i.loader} ${cls}">${LOADER_ABBR[i.loader] || 'V'}</span>`;
-const instSub = (i) => `${LOADERS[i.loader]} · ${i.mc}${i.loaderVersion ? ' · ' + i.loaderVersion : ''}`;
+const instSub = (i) => `${LOADERS[i.loader]} · ${i.mc === '__latest__' ? 'последняя версия' : i.mc}${i.loaderVersion ? ' · ' + i.loaderVersion : ''}`;
 
 // битые картинки (нет сети / нет скина) — прячем
 document.addEventListener('error', (e) => { if (e.target.tagName === 'IMG') e.target.style.visibility = 'hidden'; }, true);
@@ -82,6 +82,7 @@ function accountModal(tab = 'ms') {
       <button class="btn ghost sm icon danger" data-del="${esc(a.id)}">${icon('trash')}</button>
     </div>`).join('');
   openModal(`
+    <div class="modal-cover"></div>
     <h3>Аккаунт</h3>
     <p class="muted">Играйте с лицензией или без неё.</p>
     <div class="seg acc-tabs"><button data-t="ms" class="${tab === 'ms' ? 'active' : ''}">Лицензия</button><button data-t="off" class="${tab === 'off' ? 'active' : ''}">Без лицензии</button></div>
@@ -112,7 +113,7 @@ function accountModal(tab = 'ms') {
       if (r) { state.accounts = r; renderAccount(); closeModal(); toast(`Офлайн-аккаунт ${activeAccount().name} добавлен`); }
     };
     $('#offAdd', m).onclick = addOff;
-    $('#offName', m).onkeydown = (e) => e.key === 'Enter' && addOff();
+    $('#offName', m).addEventListener('keydown', (e) => { if (e.key === 'Enter') addOff(); });
     $$('.acc', m).forEach((el) => el.onclick = async (e) => {
       const del = e.target.closest('[data-del]');
       const r = del ? await safe(() => api.accounts.remove(del.dataset.del)) : await safe(() => api.accounts.select(el.dataset.id));
@@ -155,18 +156,21 @@ function renderInstances() {
   const g = $('#instGrid');
   g.innerHTML = state.instances.map((i) => `
     <div class="inst-card glass ${i.id === state.current?.id ? 'selected' : ''}" data-id="${i.id}">
-      <div class="inst-top">${instIcon(i)}
-        <div style="min-width:0;flex:1"><b>${esc(i.name)}</b>
-          <div class="inst-tags"><span class="badge red">${LOADERS[i.loader]}</span><span class="badge">${esc(i.mc)}</span></div>
+      <div class="inst-cover ${i.loader}"></div>
+      <div class="inst-body">
+        <div class="inst-top">${instIcon(i)}
+          <div style="min-width:0;flex:1"><b>${esc(i.name)}</b>
+            <div class="inst-tags"><span class="badge red">${LOADERS[i.loader]}</span><span class="badge">${esc(i.mc)}</span></div>
+          </div>
         </div>
-      </div>
-      <div class="inst-foot">
-        <span>${i.playtime ? 'Сыграно ' + fmtTime(i.playtime) : 'Ещё не запускалась'}</span>
-        <div class="row">
-          <button class="btn ghost sm icon" data-act="folder" data-tip="Папка">${icon('folder')}</button>
-          <button class="btn ghost sm icon" data-act="edit" data-tip="Изменить">${icon('edit')}</button>
-          <button class="btn ghost sm icon danger" data-act="del" data-tip="Удалить">${icon('trash')}</button>
-          <button class="btn primary sm" data-act="play">${icon('play')}Играть</button>
+        <div class="inst-foot">
+          <span>${i.playtime ? 'Сыграно ' + fmtTime(i.playtime) : 'Ещё не запускалась'}</span>
+          <div class="row">
+            <button class="btn ghost sm icon" data-act="folder" data-tip="Папка">${icon('folder')}</button>
+            <button class="btn ghost sm icon" data-act="edit" data-tip="Изменить">${icon('edit')}</button>
+            <button class="btn ghost sm icon danger" data-act="del" data-tip="Удалить">${icon('trash')}</button>
+            <button class="btn primary sm" data-act="play">${icon('play')}Играть</button>
+          </div>
         </div>
       </div>
     </div>`).join('') + `<button class="inst-card inst-new" id="instNewCard"><div>${icon('plus')}Новая сборка</div></button>`;
@@ -512,7 +516,9 @@ function save(p) {
   state.settings = await api.settings.get();
   state.accounts = await api.accounts.list();
   const c = state.info.config;
-  $('#brandName').textContent = c.brand; $('#heroTitle').textContent = c.brand; $('#heroTagline').textContent = c.tagline;
+  $('#brandName').textContent = c.brand; $('#heroTitle').textContent = c.brand;
+  $('#brandCompany').textContent = c.company ? `by ${c.company}` : ''; $('#heroCompany').textContent = c.company || '';
+  document.title = c.brand; $('#heroTagline').textContent = c.tagline;
   document.body.classList.toggle('no-anim', state.settings.animations === false);
   renderAccount();
   await loadInstances();

@@ -3,7 +3,7 @@ const path = require('path');
 const { Readable } = require('stream');
 const { pipeline } = require('stream/promises');
 
-const UA = 'CrimsonLauncher/0.1 (+https://example.com)';
+const UA = 'NLauncher/0.1 (+https://example.com)';
 
 async function json(url, opts = {}) {
   const res = await fetch(url, { ...opts, headers: { 'User-Agent': UA, ...(opts.headers || {}) } });

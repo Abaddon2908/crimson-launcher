@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self' https:" />
-  <title>Crimson Launcher</title>
+  <title>NLauncher</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
@@ -12,13 +12,13 @@
 <body>
   <!-- фон -->
   <div class="bg" aria-hidden="true">
-    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+    <div class="bg-img"></div><div class="blob b1"></div><div class="blob b2"></div>
     <div class="grain"></div><div class="vignette"></div>
   </div>
 
   <!-- заголовок окна -->
   <header class="titlebar">
-    <div class="brand"><span class="logo"></span><span id="brandName">CRIMSON</span></div>
+    <div class="brand"><span class="logo">N</span><span id="brandName">NLauncher</span><small id="brandCompany">by NeoDev</small></div>
     <div class="win-btns">
       <button data-win="min" aria-label="Свернуть"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
       <button data-win="max" aria-label="Развернуть"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1.5"/></svg></button>
@@ -50,7 +50,8 @@
             <div class="hero-top">
               <span class="pill" id="accountPill"><span class="dot"></span><span>Нет аккаунта</span></span>
             </div>
-            <h1 class="hero-title" id="heroTitle">CRIMSON</h1>
+            <div class="hero-company" id="heroCompany">NeoDev</div>
+            <h1 class="hero-title" id="heroTitle">NLauncher</h1>
             <p class="hero-sub" id="heroTagline">Играй красиво.</p>
 
             <div class="launch-box glass">

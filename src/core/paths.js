@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
 
-const ROOT = path.join(app.getPath('appData'), '.crimson');
+const ROOT = path.join(app.getPath('appData'), '.nlauncher');
 
 const paths = {
   root: ROOT,

@@ -15,7 +15,7 @@ const DEFAULTS = {
     jvmArgs: '',
     closeOnLaunch: false,
     showConsole: false,
-    accent: 'crimson',
+    accent: 'wine',
     animations: true,
     lastInstance: null,
     servers: [],

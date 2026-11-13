@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, nativeTheme } = require('electron');
 const path = require('path');
 
-app.setName('Crimson Launcher');
+app.setName('NLauncher');
 nativeTheme.themeSource = 'dark';
 
 let win;

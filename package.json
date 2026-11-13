@@ -1,10 +1,10 @@
 {
-  "name": "crimson-launcher",
-  "productName": "Crimson Launcher",
-  "version": "0.1.0",
-  "description": "Минималистичный Minecraft-лаунчер в тёмно-красном стиле: лицензия и офлайн, сборки, моды, сервера.",
+  "name": "nlauncher",
+  "productName": "NLauncher",
+  "version": "0.2.0",
+  "description": "NLauncher от NeoDev — минималистичный Minecraft-лаунчер: лицензия и офлайн, сборки, моды, сервера.",
   "main": "src/main.js",
-  "author": "Crimson",
+  "author": "NeoDev",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
@@ -26,8 +26,8 @@
     "electron-builder": "^25.1.8"
   },
   "build": {
-    "appId": "net.crimson.launcher",
-    "productName": "Crimson Launcher",
+    "appId": "dev.neodev.nlauncher",
+    "productName": "NLauncher",
     "files": [
       "src/**/*",
       "config.json",
@@ -63,10 +63,10 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "CrimsonLauncher-Setup-${version}.exe",
+      "artifactName": "NLauncher-Setup-${version}.exe",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Crimson Launcher",
+      "shortcutName": "NLauncher",
       "installerLanguages": [
         "ru_RU"
       ],
@@ -74,7 +74,7 @@
     },
     "icon": "build/icon.png",
     "portable": {
-      "artifactName": "CrimsonLauncher-Portable-${version}.exe"
+      "artifactName": "NLauncher-Portable-${version}.exe"
     },
     "publish": null
   }
