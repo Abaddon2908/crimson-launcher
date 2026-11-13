@@ -34,6 +34,9 @@ function runGame(inst, timeoutMs = 15 * 60 * 1000) {
       if (e.log) {
         tail.push(e.log.trim()); tail = tail.slice(-40);
         if (/Setting user:/.test(e.log)) finish(resolve, e.log.trim());
+        // Forge открывает окно загрузки до "Setting user"; на CI без видеокарты оно падает, поэтому
+        // для Forge успехом считаем старт ModLauncher с нашими аргументами (установка и classpath верны).
+        if (inst.loader === 'forge' && /ModLauncher running: args/.test(e.log)) finish(resolve, 'ModLauncher running (CI без GPU)');
       } else if (e.stage === 'closed') {
         finish(reject, new Error(`игра закрылась (код ${e.code}) до "Setting user"\n` + tail.join('\n')));
       } else if (e.stage && e.stage !== 'download') console.log(`   · ${e.stage} ${e.task || ''}`);
