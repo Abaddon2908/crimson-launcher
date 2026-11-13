@@ -2,8 +2,8 @@
   "brand": "NLauncher",
   "company": "NeoDev",
   "tagline": "Играй красиво.",
-  "site": "https://example.com",
-  "feedUrl": "https://example.com/api/launcher/feed.json",
+  "site": "https://nlauncher.ru",
+  "feedUrl": "https://nlauncher.ru/api/launcher/feed.json",
   "featuredServers": [
     { "name": "Hypixel", "address": "mc.hypixel.net", "tag": "Мини-игры" },
     { "name": "2b2t", "address": "2b2t.org", "tag": "Анархия" }

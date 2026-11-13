@@ -7,7 +7,7 @@ const DEMO = {
     title: 'Здесь будет ваш мониторинг',
     text: 'Топ серверов, продвижение и рекламные места — прямо в лаунчере.',
     cta: 'Разместить рекламу',
-    url: 'https://example.com/ads',
+    url: 'https://nlauncher.ru/ads',
     image: null,
   },
   news: [
