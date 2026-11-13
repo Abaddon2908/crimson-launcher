@@ -1,0 +1,38 @@
+{
+  "name": "crimson-launcher",
+  "productName": "Crimson Launcher",
+  "version": "0.1.0",
+  "description": "Минималистичный Minecraft-лаунчер в тёмно-красном стиле: лицензия и офлайн, сборки, моды, сервера.",
+  "main": "src/main.js",
+  "author": "Crimson",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist:mac": "electron-builder --mac"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "minecraft-launcher-core": "^3.18.2",
+    "minecraft-server-util": "^5.4.4",
+    "msmc": "^5.0.5",
+    "tar": "^7.4.3"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "net.crimson.launcher",
+    "productName": "Crimson Launcher",
+    "files": ["src/**/*", "config.json", "package.json"],
+    "directories": { "output": "dist" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage" },
+    "mac": { "target": "dmg" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  }
+}

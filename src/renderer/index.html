@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self' https:" />
+  <title>Crimson Launcher</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- фон -->
+  <div class="bg" aria-hidden="true">
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+    <div class="grain"></div><div class="vignette"></div>
+  </div>
+
+  <!-- заголовок окна -->
+  <header class="titlebar">
+    <div class="brand"><span class="logo"></span><span id="brandName">CRIMSON</span></div>
+    <div class="win-btns">
+      <button data-win="min" aria-label="Свернуть"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button data-win="max" aria-label="Развернуть"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7" rx="1.5"/></svg></button>
+      <button data-win="close" class="close" aria-label="Закрыть"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+    </div>
+  </header>
+
+  <div class="shell">
+    <!-- навигация -->
+    <nav class="sidebar glass">
+      <div class="nav">
+        <button class="nav-btn active" data-page="home" data-tip="Главная"><i data-icon="home"></i></button>
+        <button class="nav-btn" data-page="instances" data-tip="Сборки"><i data-icon="layers"></i></button>
+        <button class="nav-btn" data-page="mods" data-tip="Моды"><i data-icon="puzzle"></i></button>
+        <button class="nav-btn" data-page="servers" data-tip="Сервера"><i data-icon="server"></i></button>
+        <span class="nav-indicator"></span>
+      </div>
+      <div class="nav-bottom">
+        <button class="nav-btn" data-page="settings" data-tip="Настройки"><i data-icon="settings"></i></button>
+        <button class="avatar-btn" id="accountBtn" data-tip="Аккаунт"><span id="avatarLetter"></span><img id="avatarImg" alt="" /></button>
+      </div>
+    </nav>
+
+    <main class="pages">
+      <!-- ГЛАВНАЯ -->
+      <section class="page active" id="page-home">
+        <div class="home-grid">
+          <div class="hero">
+            <div class="hero-top">
+              <span class="pill" id="accountPill"><span class="dot"></span><span>Нет аккаунта</span></span>
+            </div>
+            <h1 class="hero-title" id="heroTitle">CRIMSON</h1>
+            <p class="hero-sub" id="heroTagline">Играй красиво.</p>
+
+            <div class="launch-box glass">
+              <button class="instance-picker" id="instancePicker">
+                <span class="inst-icon" id="pickIcon"></span>
+                <span class="inst-meta">
+                  <b id="pickName">Загрузка…</b>
+                  <small id="pickSub">—</small>
+                </span>
+                <i data-icon="chevron"></i>
+              </button>
+              <button class="play-btn" id="playBtn">
+                <span class="play-label">Играть</span>
+                <span class="play-glow"></span>
+              </button>
+            </div>
+            <div class="progress" id="progress">
+              <div class="progress-info"><span id="progTask">Готово</span><span id="progPct"></span></div>
+              <div class="progress-bar"><span id="progFill"></span></div>
+            </div>
+          </div>
+
+          <aside class="side">
+            <a class="ad-banner glass" id="adBanner">
+              <span class="ad-tag">Реклама</span>
+              <h3 id="adTitle">—</h3>
+              <p id="adText"></p>
+              <span class="ad-cta" id="adCta">Подробнее <i data-icon="arrow"></i></span>
+            </a>
+            <div class="news glass">
+              <div class="card-head"><h4>Новости</h4></div>
+              <div id="newsList" class="news-list"></div>
+            </div>
+          </aside>
+        </div>
+
+        <div class="monitor-strip">
+          <div class="strip-head"><h4>Мониторинг</h4><button class="link" data-goto="servers">Все сервера <i data-icon="arrow"></i></button></div>
+          <div class="strip" id="homeServers"></div>
+        </div>
+      </section>
+
+      <!-- СБОРКИ -->
+      <section class="page" id="page-instances">
+        <div class="page-head">
+          <div><h2>Сборки</h2><p class="muted">Отдельная папка игры, версия и модлоадер для каждой.</p></div>
+          <button class="btn primary" id="newInstanceBtn"><i data-icon="plus"></i>Новая сборка</button>
+        </div>
+        <div class="inst-grid" id="instGrid"></div>
+      </section>
+
+      <!-- МОДЫ -->
+      <section class="page" id="page-mods">
+        <div class="page-head">
+          <div><h2>Моды</h2><p class="muted">Каталог Modrinth — с автоподбором версии и зависимостей.</p></div>
+          <div class="row">
+            <select class="select" id="modsInstance"></select>
+            <button class="btn ghost icon" id="modsFolderBtn" data-tip="Открыть папку"><i data-icon="folder"></i></button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="seg" id="modsTab">
+            <button class="active" data-v="browse">Каталог</button>
+            <button data-v="installed">Установленные</button>
+          </div>
+          <div class="seg" id="modsType">
+            <button class="active" data-v="mod">Моды</button>
+            <button data-v="resourcepack">Ресурспаки</button>
+            <button data-v="shader">Шейдеры</button>
+          </div>
+          <label class="search"><i data-icon="search"></i><input id="modsQuery" placeholder="Поиск…" /></label>
+        </div>
+        <div class="mod-list" id="modList"></div>
+      </section>
+
+      <!-- СЕРВЕРА -->
+      <section class="page" id="page-servers">
+        <div class="page-head">
+          <div><h2>Сервера</h2><p class="muted">Мониторинг, продвижение и ваши избранные сервера.</p></div>
+          <div class="row">
+            <label class="search small"><i data-icon="server"></i><input id="serverAddr" placeholder="play.server.ru" /></label>
+            <button class="btn primary" id="addServerBtn"><i data-icon="plus"></i>Добавить</button>
+          </div>
+        </div>
+        <div class="server-grid" id="serverGrid"></div>
+      </section>
+
+      <!-- НАСТРОЙКИ -->
+      <section class="page" id="page-settings">
+        <div class="page-head"><div><h2>Настройки</h2><p class="muted">Сохраняются автоматически.</p></div></div>
+        <div class="settings">
+          <div class="set-card glass">
+            <h4>Память</h4>
+            <div class="set-row">
+              <div><b>Выделено ОЗУ</b><small id="ramHint">—</small></div>
+              <div class="range-wrap"><input type="range" id="sMem" min="1024" step="256" /><output id="sMemOut"></output></div>
+            </div>
+          </div>
+          <div class="set-card glass">
+            <h4>Java</h4>
+            <div class="set-row">
+              <div><b>Автоматическая Java</b><small>Скачивать подходящую версию для каждой версии игры</small></div>
+              <label class="switch"><input type="checkbox" id="sAutoJava" /><span></span></label>
+            </div>
+            <div class="set-row">
+              <div><b>Путь к Java</b><small>Используется, если авто выключено</small></div>
+              <input class="input" id="sJava" placeholder="C:\Program Files\Java\bin\javaw.exe" />
+            </div>
+            <div class="set-row">
+              <div><b>Аргументы JVM</b><small>Например: -XX:+UseG1GC</small></div>
+              <input class="input" id="sJvm" placeholder="-XX:+UseG1GC" />
+            </div>
+          </div>
+          <div class="set-card glass">
+            <h4>Игра</h4>
+            <div class="set-row">
+              <div><b>Разрешение окна</b></div>
+              <div class="row"><input class="input num" id="sW" type="number" /><span class="muted">×</span><input class="input num" id="sH" type="number" /></div>
+            </div>
+            <div class="set-row">
+              <div><b>Полноэкранный режим</b></div>
+              <label class="switch"><input type="checkbox" id="sFull" /><span></span></label>
+            </div>
+          </div>
+          <div class="set-card glass">
+            <h4>Лаунчер</h4>
+            <div class="set-row">
+              <div><b>Скрывать при запуске игры</b></div>
+              <label class="switch"><input type="checkbox" id="sHide" /><span></span></label>
+            </div>
+            <div class="set-row">
+              <div><b>Консоль при запуске</b><small>Показывать лог игры</small></div>
+              <label class="switch"><input type="checkbox" id="sConsole" /><span></span></label>
+            </div>
+            <div class="set-row">
+              <div><b>Анимации</b></div>
+              <label class="switch"><input type="checkbox" id="sAnim" /><span></span></label>
+            </div>
+            <div class="set-row">
+              <div><b>Папка лаунчера</b><small id="rootPath">—</small></div>
+              <button class="btn ghost" id="openRoot"><i data-icon="folder"></i>Открыть</button>
+            </div>
+          </div>
+          <p class="about muted" id="about"></p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- консоль -->
+  <div class="console glass" id="console">
+    <div class="console-head"><b>Консоль</b><div class="row"><button class="btn ghost sm" id="stopGame">Остановить</button><button class="btn ghost sm icon" id="closeConsole"><i data-icon="x"></i></button></div></div>
+    <pre id="consoleLog"></pre>
+  </div>
+
+  <!-- модалки -->
+  <div class="modal-wrap" id="modal"><div class="modal glass" id="modalBody"></div></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="mock.js"></script>
+  <script src="icons.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
