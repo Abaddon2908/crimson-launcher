@@ -22,17 +22,60 @@
     "tar": "^7.4.3"
   },
   "devDependencies": {
-    "electron": "^38.0.0",
+    "electron": "38.8.6",
     "electron-builder": "^25.1.8"
   },
   "build": {
     "appId": "net.crimson.launcher",
     "productName": "Crimson Launcher",
-    "files": ["src/**/*", "config.json", "package.json"],
-    "directories": { "output": "dist" },
-    "win": { "target": "nsis" },
-    "linux": { "target": "AppImage" },
-    "mac": { "target": "dmg" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "files": [
+      "src/**/*",
+      "config.json",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "CrimsonLauncher-Setup-${version}.exe",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Crimson Launcher",
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049"
+    },
+    "icon": "build/icon.png",
+    "portable": {
+      "artifactName": "CrimsonLauncher-Portable-${version}.exe"
+    },
+    "publish": null
   }
 }
