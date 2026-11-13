@@ -22,6 +22,11 @@ jobs:
         shell: bash
         run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - run: npx electron-builder --win --x64 --publish never
+        env:
+          # Подпись кода: когда появится сертификат (.pfx), добавьте секреты репозитория
+          # WIN_CSC_LINK (base64 файла .pfx) и WIN_CSC_KEY_PASSWORD — подпись включится сама.
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:

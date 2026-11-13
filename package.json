@@ -1,10 +1,13 @@
 {
   "name": "nlauncher",
   "productName": "NLauncher",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "NLauncher от NeoDev — минималистичный Minecraft-лаунчер: лицензия и офлайн, сборки, моды, сервера.",
   "main": "src/main.js",
-  "author": "NeoDev",
+  "author": {
+    "name": "NeoDev",
+    "url": "https://nlauncher.ru"
+  },
   "license": "MIT",
   "scripts": {
     "start": "electron .",
@@ -53,7 +56,11 @@
           ]
         }
       ],
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "publisherName": [
+        "NeoDev"
+      ],
+      "legalTrademarks": "NLauncher — NeoDev"
     },
     "linux": {
       "target": "AppImage"
@@ -71,12 +78,15 @@
       "installerLanguages": [
         "ru_RU"
       ],
-      "language": "1049"
+      "language": "1049",
+      "uninstallDisplayName": "NLauncher"
     },
     "icon": "build/icon.png",
     "portable": {
       "artifactName": "NLauncher-Portable-${version}.exe"
     },
-    "publish": null
-  }
+    "publish": null,
+    "copyright": "© 2026 NeoDev"
+  },
+  "homepage": "https://nlauncher.ru"
 }
