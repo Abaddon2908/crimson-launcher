@@ -18,12 +18,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - id: v
+        shell: bash
+        run: echo "version=v$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
       - run: npx electron-builder --win --x64 --publish never
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
-          name: Crimson Launcher ${{ github.ref_type == 'tag' && github.ref_name || format('build {0}', github.run_number) }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.v.outputs.version }}
+          name: Crimson Launcher ${{ github.ref_type == 'tag' && github.ref_name || steps.v.outputs.version }}
           body_path: .github/RELEASE_NOTES.md
           files: |
             dist/CrimsonLauncher-Setup-*.exe

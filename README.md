@@ -94,3 +94,5 @@ git tag v0.1.1 && git push origin v0.1.1
 ```
 
 Не забудьте поднять `version` в `package.json`.
+
+Или без тегов: вкладка **Actions** → **Build & Release** → **Run workflow** — релиз получит версию из `package.json`.
