@@ -1,5 +1,7 @@
 # Crimson Launcher
 
+**[⬇ Скачать для Windows](https://github.com/Abaddon2908/crimson-launcher/releases/latest)**
+
 Минималистичный Minecraft-лаунчер в тёмно-красном стиле: стекло, блюры, градиенты, плавные анимации.
 
 ## Возможности
@@ -82,3 +84,13 @@ config.json      — бренд, сайт, сервера
 ## Идеи на будущее
 
 Автообновление (electron-updater), импорт модпаков `.mrpack`, NeoForge, голосование за сервера с наградами через API сайта, свои скины для офлайн-игроков.
+
+## Релизы
+
+Готовые `.exe` лежат во вкладке **Releases**. Новый релиз собирается автоматически (GitHub Actions, Windows) при пуше тега:
+
+```bash
+git tag v0.1.1 && git push origin v0.1.1
+```
+
+Не забудьте поднять `version` в `package.json`.
