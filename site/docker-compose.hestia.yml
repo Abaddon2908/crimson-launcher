@@ -1,0 +1,14 @@
+# Вариант для сервера с панелью Hestia (или любым nginx, который уже занимает 80/443).
+# Сайт слушает только 127.0.0.1:3080, HTTPS и домен обслуживает nginx панели.
+# Запуск: docker compose -f docker-compose.hestia.yml up -d --build
+services:
+  site:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TRUST_PROXY: "1"
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:3080:3000"

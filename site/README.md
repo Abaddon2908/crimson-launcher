@@ -29,7 +29,38 @@
 
 **Связь с NLauncher**: `GET /api/launcher/feed.json` отдаёт баннер, новости, PROMO-сервера и топ.
 
-## Запуск на VPS (Docker)
+## Запуск на сервере с панелью Hestia (nlauncher.ru)
+
+Если на сервере уже стоит Hestia и работают другие сайты, используйте этот вариант. Сайт запускается в Docker на `127.0.0.1:3080`, домен и SSL обслуживает nginx панели.
+
+1. **DNS.** У регистратора домена создайте A-записи `@` → IP сервера и `www` → IP сервера.
+   Если DNS домена ведётся в самой Hestia (вкладка DNS), добавьте зону там, а у регистратора укажите NS-серверы панели.
+2. **Домен в панели.** WEB → «Добавить веб-домен» → `nlauncher.ru`, алиас `www.nlauncher.ru`. Галочку SSL пока **не** ставьте.
+3. **По SSH под root:**
+
+```bash
+cd /opt && git clone https://github.com/Abaddon2908/crimson-launcher.git
+```
+```bash
+cd /opt/crimson-launcher/site && bash deploy/hestia-setup.sh nlauncher.ru
+```
+
+Скрипт:
+- поставит Docker, если его нет;
+- спросит email и пароль администратора;
+- запустит сайт;
+- установит в Hestia шаблон nginx `nlauncher` и применит его к домену;
+- выпустит сертификат Let's Encrypt.
+
+Если DNS ещё не обновился, сертификат не выпустится. Скрипт напишет команду, которую нужно повторить позже.
+
+Обновление сайта:
+
+```bash
+cd /opt/crimson-launcher && git pull && cd site && docker compose -f docker-compose.hestia.yml up -d --build
+```
+
+## Запуск на чистом VPS (Docker + Caddy)
 
 Подойдёт любой VPS с Docker: 1 ГБ ОЗУ хватает с запасом.
 
