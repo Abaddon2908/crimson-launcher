@@ -348,3 +348,17 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
   .kv dd { margin-bottom: 8px; }
   .top-right .btn.primary { display: none; }
 }
+
+/* админка: поиск, карточка сервера, бейджи услуг */
+.admin-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.admin-tools .chips { margin: 0; }
+.admin-search { display: flex; align-items: center; gap: 10px; min-width: 280px; height: 40px; padding: 0 14px; border-radius: 12px; background: var(--field); color: var(--muted); }
+.admin-search:focus-within { background: var(--field-hover); box-shadow: 0 0 0 2px var(--accent-soft); }
+.admin-search input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--text); }
+.badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.admin-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.stats.three { grid-template-columns: repeat(3, 1fr); }
+.stats.three .stat { padding: 10px 0; }
+.chip { cursor: pointer; border: 0; }
+@media (max-width: 1000px) { .admin-grid { grid-template-columns: 1fr; } .admin-search { min-width: 0; width: 100%; } }
+.srv-link:hover b { color: var(--accent-2); }

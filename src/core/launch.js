@@ -9,6 +9,8 @@ const java = require('./java');
 const versions = require('./versions');
 const instances = require('./instances');
 const { json, download } = require('./net');
+const feed = require('./feed');
+const ingame = require('./ingame');
 
 let running = null; // { client, instanceId, started }
 
@@ -68,6 +70,17 @@ async function start(instanceId, emit, server = null) {
   const loader = await prepareLoader(inst, emit);
   const gameDir = paths.instance(inst.id);
   fs.mkdirSync(gameDir, { recursive: true });
+
+  // «Сервер в игре»: оплаченные на сайте сервера появляются в списке «Сетевая игра».
+  // Любая ошибка здесь не должна мешать запуску.
+  try {
+    const cfg = require('../../config.json');
+    const f = await feed.load(cfg.feedUrl);
+    const r = ingame.apply(gameDir, f.ingame || []);
+    if (r.added || r.removed) emit({ log: `[NLauncher] Список серверов игры: добавлено ${r.added}, убрано ${r.removed}` });
+  } catch (e) {
+    emit({ log: `[NLauncher] Список серверов игры не обновлён: ${e.message}` });
+  }
 
   const memMax = inst.memoryMax || s.memoryMax;
   const opts = {

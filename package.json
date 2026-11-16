@@ -1,7 +1,7 @@
 {
   "name": "nlauncher",
   "productName": "NLauncher",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "NLauncher — Minecraft-лаунчер от NeoDev",
   "main": "src/main.js",
   "author": {
@@ -16,7 +16,8 @@
     "dist:win": "electron-builder --win",
     "dist:linux": "electron-builder --linux",
     "dist:mac": "electron-builder --mac",
-    "test:e2e": "node test/e2e.js"
+    "test:e2e": "node test/e2e.js",
+    "test": "node test/ingame.test.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.16",
@@ -27,7 +28,8 @@
   },
   "devDependencies": {
     "electron": "38.8.6",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "prismarine-nbt": "^2.8.0"
   },
   "build": {
     "appId": "dev.neodev.nlauncher",

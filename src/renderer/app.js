@@ -355,7 +355,7 @@ function serverCard(s, opts = {}) {
     <div class="srv glass ${s.ad ? 'ad' : ''}" id="${id}" data-addr="${esc(s.address)}">
       <div class="srv-icon"></div>
       <div class="srv-body">
-        <b><span>${esc(s.name || s.address)}</span>${s.ad ? '<span class="badge gold">PROMO</span>' : s.tag ? `<span class="badge">${esc(s.tag)}</span>` : ''}</b>
+        <b><span class="srv-name">${esc(s.name || s.address)}</span>${s.ad ? '<span class="badge gold">PROMO</span>' : s.tag ? `<span class="badge">${esc(s.tag)}</span>` : ''}</b>
         <small>${esc(s.desc || s.address)}</small>
         <div class="srv-stats"><span class="row" style="gap:6px"><span class="dot"></span>Проверка…</span></div>
       </div>
@@ -381,7 +381,9 @@ function bindServers(root) {
 function renderHomeServers() {
   const { promoted, featured, mine } = allServers();
   const list = [...promoted, ...featured, ...mine].slice(0, 4);
-  $('#homeServers').innerHTML = list.map((s) => serverCard(s)).join('');
+  $('#homeServers').innerHTML = list.length
+    ? list.map((s) => serverCard(s)).join('')
+    : `<div class="strip-empty glass">Топ серверов появится здесь, когда заработает сайт мониторинга. Свои сервера можно добавить во вкладке <button class="link" data-goto="servers">Сервера ${icon('arrow')}</button></div>`;
   bindServers($('#homeServers'));
 }
 function renderServers() {

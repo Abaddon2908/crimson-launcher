@@ -109,7 +109,30 @@ const DEFAULT_PRODUCTS = [
   ['promo_30', 'promo', 'PROMO в топе — 30 дней', 'То же, что и PROMO на неделю, но на месяц и выгоднее.', 2990, 30, 5, 2],
   ['banner_7', 'banner', 'Баннер в лаунчере — 7 дней', 'Большой баннер на главной NLauncher и на сайте. Один слот, по очереди.', 1990, 7, 1, 3],
   ['highlight_30', 'highlight', 'Выделение цветом — 30 дней', 'Карточка сервера выделена в общем топе.', 490, 30, 0, 4],
+  ['ingame_7', 'ingame', 'Сервер в игре — 7 дней', 'Ваш сервер первым в списке «Сетевая игра» у всех игроков NLauncher — прямо внутри Minecraft.', 1490, 7, 3, 5],
+  ['ingame_30', 'ingame', 'Сервер в игре — 30 дней', 'То же на месяц: сервер в списке «Сетевая игра» у каждого игрока NLauncher.', 4490, 30, 3, 6],
 ];
+
+/** Виды услуг (используются в кабинете, админке и ленте лаунчера) */
+const KINDS = {
+  promo: { label: 'PROMO в топе', short: 'PROMO' },
+  banner: { label: 'Баннер в лаунчере', short: 'Баннер' },
+  highlight: { label: 'Выделение цветом', short: 'Выделение' },
+  ingame: { label: 'Сервер в игре', short: 'В игре' },
+};
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS admin_log (
+  id INTEGER PRIMARY KEY,
+  admin_id INTEGER,
+  action TEXT NOT NULL,
+  details TEXT NOT NULL DEFAULT '',
+  ts INTEGER NOT NULL
+);
+`);
+// миграции существующих баз
+const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+if (!orderCols.includes('note')) db.exec(`ALTER TABLE orders ADD COLUMN note TEXT NOT NULL DEFAULT ''`);
 const insP = db.prepare('INSERT OR IGNORE INTO products (code, kind, title, description, price, days, slots, sort) VALUES (?,?,?,?,?,?,?,?)');
 for (const p of DEFAULT_PRODUCTS) insP.run(...p);
 
@@ -170,19 +193,42 @@ function nextFreeStart(product) {
   return busy[busy.length - product.slots].ends;
 }
 
-/** Отметить заказ оплаченным (идемпотентно) и рассчитать период показа */
-function markPaid(orderId, provider, ref = '') {
+/** Отметить заказ оплаченным (идемпотентно) и рассчитать период показа.
+ *  startNow — начать сразу, без очереди (выдача администратором). */
+function markPaid(orderId, provider, ref = '', { startNow = false } = {}) {
   const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!o) return null;
   if (o.status === 'paid') return o;
-  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(o.product_id) || { kind: o.kind, slots: 0 };
+  const product = db.prepare('SELECT * FROM products WHERE id = ?').get(o.product_id)
+    || db.prepare('SELECT * FROM products WHERE kind = ? AND active = 1 ORDER BY slots DESC LIMIT 1').get(o.kind)
+    || { kind: o.kind, slots: 0 };
   // продление: если у сервера уже есть активный заказ того же типа — начинаем после него
   const last = db.prepare(`SELECT MAX(ends) AS e FROM orders WHERE server_id = ? AND kind = ? AND status = 'paid'`).get(o.server_id, o.kind)?.e || 0;
-  const starts = Math.max(now(), last, nextFreeStart(product));
+  const starts = startNow ? now() : Math.max(now(), last, nextFreeStart(product));
   const ends = starts + o.days * DAY;
   db.prepare(`UPDATE orders SET status = 'paid', provider = ?, provider_ref = ?, paid_at = ?, starts = ?, ends = ? WHERE id = ?`)
     .run(provider, String(ref), now(), starts, ends, orderId);
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
 }
 
-module.exports = { db, settings, now, DAY, topServers, activeBanner, markPaid, monthStart, nextFreeStart };
+/** Активные услуги сервера: { promo: ends, banner: ends, ... } */
+function activeServices(serverId) {
+  const t = now();
+  const out = {};
+  for (const r of db.prepare(`SELECT kind, MAX(ends) AS ends FROM orders WHERE server_id = ? AND status = 'paid' AND starts <= ? AND ends > ? GROUP BY kind`).all(serverId, t, t)) out[r.kind] = r.ends;
+  return out;
+}
+
+/** Сервера с активной услугой «в игре» — для лаунчера */
+function ingameServers() {
+  const t = now();
+  return db.prepare(`SELECT s.id, s.name, s.address, s.favicon, MIN(o.starts) AS since FROM orders o JOIN servers s ON s.id = o.server_id
+    WHERE o.status = 'paid' AND o.kind = 'ingame' AND o.starts <= ? AND o.ends > ? AND s.status = 'approved'
+    GROUP BY s.id ORDER BY since`).all(t, t);
+}
+
+function logAdmin(adminId, action, details = '') {
+  db.prepare('INSERT INTO admin_log (admin_id, action, details, ts) VALUES (?, ?, ?, ?)').run(adminId || null, action, String(details).slice(0, 500), now());
+}
+
+module.exports = { db, settings, now, DAY, KINDS, topServers, activeBanner, markPaid, monthStart, nextFreeStart, activeServices, ingameServers, logAdmin };

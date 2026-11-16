@@ -175,7 +175,7 @@ function server(req, { s, votes, points, range, voted, error, owner, rank }) {
 }
 
 function ads(req, { products, stats }) {
-  const kindIcon = { promo: 'bolt', banner: 'news', highlight: 'star' };
+  const kindIcon = { promo: 'bolt', banner: 'news', highlight: 'star', ingame: 'server' };
   return layout(req, {
     title: 'Реклама',
     body: html`

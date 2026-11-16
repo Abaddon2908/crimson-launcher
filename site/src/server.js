@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
 
-const { db, settings, now, DAY, topServers, activeBanner, markPaid, monthStart, nextFreeStart } = require('./db');
+const { db, settings, now, DAY, KINDS, topServers, activeBanner, markPaid, monthStart, nextFreeStart, activeServices, ingameServers, logAdmin } = require('./db');
 const auth = require('./auth');
 const pinger = require('./pinger');
 const yoomoney = require('./payments/yoomoney');
@@ -168,7 +168,8 @@ cab.get('/', (req, res) => {
   const list = db.prepare(`SELECT s.*,
       (SELECT COUNT(*) FROM votes v WHERE v.server_id = s.id AND v.ts >= ?) AS votes,
       (SELECT MAX(ends) FROM orders o WHERE o.server_id = s.id AND o.kind = 'promo' AND o.status = 'paid' AND o.ends > ?) AS promo_until
-    FROM servers s WHERE owner_id = ? ORDER BY created DESC`).all(monthStart(), t, req.user.id);
+    FROM servers s WHERE owner_id = ? ORDER BY created DESC`).all(monthStart(), t, req.user.id)
+    .map((s) => ({ ...s, services: activeServices(s.id) }));
   send(res, V.cab.servers(req, { list, flash: req.query.saved ? 'Сохранено' : req.query.created ? 'Сервер отправлен на модерацию — обычно это занимает до суток.' : req.query.deleted ? 'Сервер удалён' : '' }));
 });
 
@@ -324,6 +325,8 @@ app.get(['/api/launcher/feed.json', '/api/launcher/feed'], (req, res) => {
       .map((n) => ({ title: n.title, text: n.text, url: safeUrl(n.url) || null, date: new Date(n.created).toISOString().slice(0, 10) })),
     promoted: top.filter((s) => s.promo).map((s) => ({ name: s.name, address: s.address, desc: s.description.split('\n')[0].slice(0, 80) || s.motd, tag: 'Промо', ad: true })),
     top: top.filter((s) => !s.promo).slice(0, 10).map((s) => ({ name: s.name, address: s.address, tag: s.tagList[0] || `#${s.rank}`, votes: s.votes })),
+    // «Сервер в игре»: лаунчер добавит их в начало списка «Сетевая игра» (иконка — PNG base64 из пинга)
+    ingame: ingameServers().map((s) => ({ name: s.name, address: s.address, icon: s.favicon.startsWith('data:image/png;base64,') ? s.favicon.slice(22) : '' })),
     site: settings.get('site_url'),
   });
 });
@@ -337,7 +340,14 @@ app.get('/api/servers', (req, res) => {
 /* ======================= Админка ======================= */
 const adm = express.Router();
 adm.use(auth.requireAdmin);
-const flashOf = (req) => ({ ok: 'Готово', saved: 'Сохранено' }[req.query.f] || '');
+const flashOf = (req) => ({
+  ok: 'Готово', saved: 'Сохранено', granted: 'Услуга выдана и уже работает',
+  nouser: '⚠ Пользователь с таким email не найден — владелец не изменён',
+  shortpw: '⚠ Пароль не изменён: нужно минимум 8 символов',
+}[req.query.f] || '');
+const audit = (req, action, details) => logAdmin(req.user.id, action, details);
+const serverName = (id) => db.prepare('SELECT name FROM servers WHERE id = ?').get(id)?.name || `#${id}`;
+const like = (q) => `%${q}%`;
 
 adm.get('/', (req, res) => {
   const t = now();
@@ -347,88 +357,259 @@ adm.get('/', (req, res) => {
     const from = d0.getTime() - (29 - i) * DAY;
     return { t: from, v: db.prepare(`SELECT COALESCE(SUM(amount), 0) AS s FROM orders WHERE status = 'paid' AND paid_at >= ? AND paid_at < ?`).get(from, from + DAY).s };
   });
+  const st = siteStats();
   send(res, V.adm.dashboard(req, {
     revenueMonth: sum(monthStart()), revenueTotal: sum(0), revenueDays,
     paidOrders: db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE status = 'paid'`).get().n,
     pendingOrders: db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'`).get().n,
     servers: db.prepare(`SELECT COUNT(*) AS n FROM servers WHERE status = 'approved'`).get().n,
     pendingServers: db.prepare(`SELECT COUNT(*) AS n FROM servers WHERE status = 'pending'`).get().n,
-    players: siteStats().players, votes: siteStats().votes,
+    users: db.prepare('SELECT COUNT(*) AS n FROM users').get().n,
+    players: st.players, votes: st.votes,
     active: db.prepare(`SELECT o.*, s.name AS server_name FROM orders o LEFT JOIN servers s ON s.id = o.server_id WHERE o.status = 'paid' AND o.starts <= ? AND o.ends > ? ORDER BY o.ends`).all(t, t),
     recent: db.prepare('SELECT * FROM orders ORDER BY id DESC LIMIT 8').all(),
+    flash: flashOf(req),
   }));
 });
 
+/* ---- сервера ---- */
 adm.get('/servers', (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
+  const q = str(req.query.q, 80);
   const list = db.prepare(`SELECT s.*, u.email AS owner_email, (SELECT COUNT(*) FROM votes v WHERE v.server_id = s.id AND v.ts >= ?) AS votes
-    FROM servers s LEFT JOIN users u ON u.id = s.owner_id WHERE (? = '' OR s.status = ?) ORDER BY (s.status = 'pending') DESC, s.created DESC`).all(monthStart(), status, status);
-  send(res, V.adm.servers(req, { list, status, flash: flashOf(req) }));
+    FROM servers s LEFT JOIN users u ON u.id = s.owner_id
+    WHERE (? = '' OR s.status = ?) AND (? = '' OR s.name LIKE ? OR s.address LIKE ? OR u.email LIKE ?)
+    ORDER BY (s.status = 'pending') DESC, s.created DESC LIMIT 500`).all(monthStart(), status, status, q, like(q), like(q), like(q))
+    .map((s) => ({ ...s, services: activeServices(s.id) }));
+  send(res, V.adm.servers(req, { list, status, q, flash: flashOf(req) }));
 });
-adm.post('/servers/:id/approve', (req, res) => { db.prepare(`UPDATE servers SET status = 'approved', reject_reason = '' WHERE id = ?`).run(int(req.params.id)); res.redirect('back'); });
-adm.post('/servers/:id/reject', (req, res) => { db.prepare(`UPDATE servers SET status = 'rejected', reject_reason = ? WHERE id = ?`).run(str(req.body.reason, 300), int(req.params.id)); res.redirect('back'); });
-adm.post('/servers/:id/delete', (req, res) => { db.prepare('DELETE FROM servers WHERE id = ?').run(int(req.params.id)); res.redirect('/admin/servers?f=ok'); });
-adm.post('/servers/:id/promo', (req, res) => {
+
+adm.get('/servers/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(int(req.params.id));
-  if (s) {
-    const r = db.prepare(`INSERT INTO orders (user_id, server_id, kind, title, amount, days, provider, created) VALUES (?, ?, 'promo', 'PROMO (выдано админом)', 0, 7, 'manual', ?)`).run(req.user.id, s.id, now());
-    markPaid(Number(r.lastInsertRowid), 'manual', `admin:${req.user.id}`);
-  }
+  if (!s) return res.redirect('/admin/servers');
+  const ms = monthStart();
+  send(res, V.adm.serverDetail(req, {
+    s,
+    owner: s.owner_id ? db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(s.owner_id) : null,
+    services: activeServices(s.id),
+    orders: db.prepare('SELECT * FROM orders WHERE server_id = ? ORDER BY id DESC LIMIT 50').all(s.id),
+    votes: db.prepare('SELECT * FROM votes WHERE server_id = ? ORDER BY ts DESC LIMIT 15').all(s.id),
+    voteStats: {
+      month: db.prepare('SELECT COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, ms).n,
+      day: db.prepare('SELECT COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, now() - DAY).n,
+      ips: db.prepare('SELECT COUNT(DISTINCT ip) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, ms).n,
+      topIps: db.prepare('SELECT ip, COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ? GROUP BY ip HAVING n > 1 ORDER BY n DESC LIMIT 5').all(s.id, ms),
+    },
+    flash: flashOf(req),
+  }));
+});
+
+/** Вернуться на страницу админки, с которой пришли (только внутри /admin) */
+function backTo(req, fallback) {
+  try {
+    const u = new URL(req.get('referer') || '', 'http://local');
+    if (/^\/admin(\/|$)/.test(u.pathname)) return u.pathname + u.search;
+  } catch { /* битый referer */ }
+  return fallback;
+}
+
+adm.post('/servers/:id/approve', (req, res) => {
+  const id = int(req.params.id);
+  db.prepare(`UPDATE servers SET status = 'approved', reject_reason = '' WHERE id = ?`).run(id);
+  audit(req, 'Одобрил сервер', serverName(id));
+  res.redirect(backTo(req, '/admin/servers'));
+});
+adm.post('/servers/:id/reject', (req, res) => {
+  const id = int(req.params.id);
+  db.prepare(`UPDATE servers SET status = 'rejected', reject_reason = ? WHERE id = ?`).run(str(req.body.reason, 300), id);
+  audit(req, 'Отклонил сервер', `${serverName(id)}: ${str(req.body.reason, 200)}`);
+  res.redirect(backTo(req, '/admin/servers'));
+});
+adm.post('/servers/:id/delete', (req, res) => {
+  const id = int(req.params.id);
+  audit(req, 'Удалил сервер', serverName(id));
+  db.prepare('DELETE FROM servers WHERE id = ?').run(id);
   res.redirect('/admin/servers?f=ok');
 });
-
-adm.get('/orders', (req, res) => {
-  const status = ['pending', 'paid', 'cancelled'].includes(req.query.status) ? req.query.status : '';
-  const list = db.prepare(`SELECT o.*, s.name AS server_name, u.email AS user_email FROM orders o
-    LEFT JOIN servers s ON s.id = o.server_id LEFT JOIN users u ON u.id = o.user_id WHERE (? = '' OR o.status = ?) ORDER BY o.id DESC LIMIT 300`).all(status, status);
-  send(res, V.adm.orders(req, { list, status, flash: flashOf(req) }));
+adm.post('/servers/:id/owner', (req, res) => {
+  const id = int(req.params.id);
+  const u = db.prepare('SELECT id, email FROM users WHERE email = ?').get(str(req.body.email, 120).toLowerCase());
+  if (u) { db.prepare('UPDATE servers SET owner_id = ? WHERE id = ?').run(u.id, id); audit(req, 'Сменил владельца', `${serverName(id)} → ${u.email}`); }
+  res.redirect(`/admin/servers/${id}?f=${u ? 'saved' : 'nouser'}`);
 });
-adm.post('/orders/:id/paid', (req, res) => { markPaid(int(req.params.id), 'manual', `admin:${req.user.id}`); res.redirect('/admin/orders?f=ok'); });
-adm.post('/orders/:id/cancel', (req, res) => { db.prepare(`UPDATE orders SET status = 'cancelled' WHERE id = ?`).run(int(req.params.id)); res.redirect('/admin/orders?f=ok'); });
+adm.post('/servers/:id/reset-votes', (req, res) => {
+  const id = int(req.params.id);
+  const r = db.prepare('DELETE FROM votes WHERE server_id = ? AND ts >= ?').run(id, monthStart());
+  audit(req, 'Обнулил голоса за месяц', `${serverName(id)}: ${r.changes}`);
+  res.redirect(`/admin/servers/${id}?f=ok`);
+});
+adm.post('/servers/:id/delete-ip-votes', (req, res) => {
+  const id = int(req.params.id);
+  const ip = str(req.body.ip, 60);
+  const r = db.prepare('DELETE FROM votes WHERE server_id = ? AND ip = ?').run(id, ip);
+  audit(req, 'Удалил голоса по IP', `${serverName(id)}: ${ip} (${r.changes})`);
+  res.redirect(`/admin/servers/${id}?f=ok`);
+});
+adm.post('/votes/:id/delete', (req, res) => {
+  const v = db.prepare('SELECT * FROM votes WHERE id = ?').get(int(req.params.id));
+  if (v) { db.prepare('DELETE FROM votes WHERE id = ?').run(v.id); audit(req, 'Удалил голос', `${serverName(v.server_id)}: ${v.nickname}`); }
+  res.redirect(v ? `/admin/servers/${v.server_id}?f=ok` : '/admin/servers');
+});
 
+/* ---- выдача любой услуги ---- */
+function kindDefaults() {
+  const out = {};
+  for (const k of Object.keys(KINDS)) out[k] = db.prepare('SELECT days FROM products WHERE kind = ? AND active = 1 ORDER BY price LIMIT 1').get(k)?.days || 7;
+  return out;
+}
+const allServersForAdmin = () => db.prepare(`SELECT id, name, address, status FROM servers ORDER BY (status = 'approved') DESC, name`).all();
+
+adm.get('/grant', (req, res) => {
+  send(res, V.adm.grant(req, { servers: allServersForAdmin(), sel: { server: int(req.query.server), kind: str(req.query.kind, 20) }, kindDefaults: kindDefaults() }));
+});
+adm.post('/grant', (req, res) => {
+  const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(int(req.body.server_id));
+  const kind = str(req.body.kind, 20);
+  const days = int(req.body.days);
+  const amount = Math.max(0, int(req.body.amount));
+  const fail = (error) => send(res, V.adm.grant(req, { servers: allServersForAdmin(), sel: { server: int(req.body.server_id), kind, days }, kindDefaults: kindDefaults(), error }), 400);
+  if (!s) return fail('Выберите сервер');
+  if (!KINDS[kind]) return fail('Выберите услугу');
+  if (!(days >= 1 && days <= 3650)) return fail('Срок — от 1 до 3650 дней');
+  const product = db.prepare('SELECT id FROM products WHERE kind = ? ORDER BY active DESC, price LIMIT 1').get(kind);
+  const b = kind === 'banner'
+    ? { t: str(req.body.banner_title, 60) || s.name, x: str(req.body.banner_text, 140), i: safeUrl(req.body.banner_image), u: safeUrl(req.body.banner_url) }
+    : { t: '', x: '', i: '', u: '' };
+  const r = db.prepare(`INSERT INTO orders (user_id, server_id, product_id, kind, title, amount, days, provider, banner_title, banner_text, banner_image, banner_url, note, created)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?)`)
+    .run(s.owner_id, s.id, product?.id ?? null, kind, `${KINDS[kind].label} — ${days} дн. (выдано админом)`, amount, days, b.t, b.x, b.i, b.u, str(req.body.note, 200), now());
+  const o = markPaid(Number(r.lastInsertRowid), 'manual', `admin:${req.user.id}`, { startNow: Boolean(req.body.start_now) });
+  audit(req, 'Выдал услугу', `${KINDS[kind].label} на ${days} дн. → ${s.name}${amount ? `, ${amount} ₽` : ''} (заказ #${o.id})`);
+  res.redirect(`/admin/servers/${s.id}?f=granted`);
+});
+
+/* ---- заказы ---- */
+function ordersQuery(status, q, limit = 300) {
+  const t = now();
+  const cond = status === 'active' ? `o.status = 'paid' AND o.starts <= ${t} AND o.ends > ${t}` : status ? 'o.status = ?' : '1=1';
+  const params = status && status !== 'active' ? [status] : [];
+  const idq = /^#?\d+$/.test(q) ? int(q.replace('#', '')) : -1;
+  return db.prepare(`SELECT o.*, s.name AS server_name, u.email AS user_email FROM orders o
+    LEFT JOIN servers s ON s.id = o.server_id LEFT JOIN users u ON u.id = o.user_id
+    WHERE ${cond} AND (? = '' OR o.id = ? OR s.name LIKE ? OR s.address LIKE ? OR u.email LIKE ?) ORDER BY o.id DESC LIMIT ${limit}`)
+    .all(...params, q, idq, like(q), like(q), like(q));
+}
+adm.get('/orders', (req, res) => {
+  const status = ['pending', 'paid', 'cancelled', 'active'].includes(req.query.status) ? req.query.status : '';
+  const q = str(req.query.q, 80);
+  send(res, V.adm.orders(req, { list: ordersQuery(status, q), status, q, flash: flashOf(req) }));
+});
+adm.get('/orders.csv', (req, res) => {
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const d = (t) => (t ? new Date(t).toISOString().replace('T', ' ').slice(0, 16) : '');
+  const rows = ordersQuery('', '', 100000).map((o) => [o.id, d(o.created), o.user_email, o.server_name, o.kind, o.title, o.amount, o.provider, o.status, d(o.paid_at), d(o.starts), d(o.ends), o.note].map(cell).join(';'));
+  res.set({ 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="orders-${new Date().toISOString().slice(0, 10)}.csv"` })
+    .send('﻿' + ['id;создан;покупатель;сервер;вид;услуга;сумма;оплата;статус;оплачен;начало;конец;комментарий', ...rows].join('\r\n'));
+});
+adm.post('/orders/:id/paid', (req, res) => {
+  const o = markPaid(int(req.params.id), 'manual', `admin:${req.user.id}`);
+  if (o) audit(req, 'Подтвердил оплату вручную', `заказ #${o.id}, ${o.amount} ₽`);
+  res.redirect(backTo(req, '/admin/orders?f=ok'));
+});
+adm.post('/orders/:id/cancel', (req, res) => {
+  const id = int(req.params.id);
+  db.prepare(`UPDATE orders SET status = 'cancelled' WHERE id = ?`).run(id);
+  audit(req, 'Отменил заказ', `#${id}`);
+  res.redirect(backTo(req, '/admin/orders?f=ok'));
+});
+adm.post('/orders/:id/extend', (req, res) => {
+  const id = int(req.params.id);
+  const days = Number.parseInt(req.body.days, 10);
+  const o = db.prepare(`SELECT * FROM orders WHERE id = ? AND status = 'paid'`).get(id);
+  if (o && days && Math.abs(days) <= 3650) {
+    const ends = Math.max(now(), o.ends + days * DAY);
+    db.prepare('UPDATE orders SET ends = ?, days = days + ? WHERE id = ?').run(ends, days, id);
+    audit(req, days > 0 ? 'Продлил услугу' : 'Сократил услугу', `заказ #${id} (${serverName(o.server_id)}): ${days > 0 ? '+' : ''}${days} дн.`);
+  }
+  res.redirect(backTo(req, '/admin/orders?f=ok'));
+});
+adm.post('/orders/:id/end', (req, res) => {
+  const id = int(req.params.id);
+  const o = db.prepare(`SELECT * FROM orders WHERE id = ? AND status = 'paid'`).get(id);
+  if (o) { db.prepare('UPDATE orders SET ends = ? WHERE id = ?').run(Math.max(o.starts, now()), id); audit(req, 'Завершил услугу досрочно', `заказ #${id} (${serverName(o.server_id)})`); }
+  res.redirect(backTo(req, '/admin/orders?f=ok'));
+});
+
+/* ---- тарифы ---- */
 adm.get('/products', (req, res) => send(res, V.adm.products(req, { list: db.prepare('SELECT * FROM products ORDER BY sort, id').all(), flash: flashOf(req) })));
 adm.post('/products/new', (req, res) => {
-  const kind = ['promo', 'banner', 'highlight'].includes(req.body.kind) ? req.body.kind : 'promo';
+  const kind = KINDS[req.body.kind] ? req.body.kind : 'promo';
+  const title = str(req.body.title, 80) || 'Тариф';
   db.prepare('INSERT INTO products (code, kind, title, price, days, slots, sort) VALUES (?, ?, ?, ?, ?, ?, 99)')
-    .run(`${kind}_${crypto.randomBytes(3).toString('hex')}`, kind, str(req.body.title, 80) || 'Тариф', Math.max(1, int(req.body.price)), Math.max(1, int(req.body.days)), kind === 'banner' ? 1 : 0);
+    .run(`${kind}_${crypto.randomBytes(3).toString('hex')}`, kind, title, Math.max(1, int(req.body.price)), Math.max(1, int(req.body.days)), kind === 'banner' ? 1 : kind === 'ingame' ? 3 : 0);
+  audit(req, 'Добавил тариф', title);
   res.redirect('/admin/products?f=saved');
 });
 adm.post('/products/:id', (req, res) => {
+  const title = str(req.body.title, 80);
   db.prepare('UPDATE products SET title = ?, description = ?, price = ?, days = ?, slots = ?, active = ? WHERE id = ?')
-    .run(str(req.body.title, 80), str(req.body.description, 300), Math.max(1, int(req.body.price)), Math.max(1, int(req.body.days)), Math.max(0, int(req.body.slots)), req.body.active ? 1 : 0, int(req.params.id));
+    .run(title, str(req.body.description, 300), Math.max(1, int(req.body.price)), Math.max(1, int(req.body.days)), Math.max(0, int(req.body.slots)), req.body.active ? 1 : 0, int(req.params.id));
+  audit(req, 'Изменил тариф', `${title}: ${int(req.body.price)} ₽ / ${int(req.body.days)} дн.${req.body.active ? '' : ' (снят с продажи)'}`);
   res.redirect('/admin/products?f=saved');
 });
 
+/* ---- новости ---- */
 adm.get('/news', (req, res) => send(res, V.adm.news(req, { list: db.prepare('SELECT * FROM news ORDER BY created DESC').all(), flash: flashOf(req) })));
 adm.post('/news', (req, res) => {
   const title = str(req.body.title, 80);
-  if (title) db.prepare('INSERT INTO news (title, text, url, created) VALUES (?, ?, ?, ?)').run(title, str(req.body.text, 400), safeUrl(req.body.url), now());
+  if (title) { db.prepare('INSERT INTO news (title, text, url, created) VALUES (?, ?, ?, ?)').run(title, str(req.body.text, 400), safeUrl(req.body.url), now()); audit(req, 'Опубликовал новость', title); }
   res.redirect('/admin/news?f=saved');
 });
 adm.post('/news/:id/toggle', (req, res) => { db.prepare('UPDATE news SET published = 1 - published WHERE id = ?').run(int(req.params.id)); res.redirect('/admin/news'); });
-adm.post('/news/:id/delete', (req, res) => { db.prepare('DELETE FROM news WHERE id = ?').run(int(req.params.id)); res.redirect('/admin/news?f=ok'); });
+adm.post('/news/:id/delete', (req, res) => { db.prepare('DELETE FROM news WHERE id = ?').run(int(req.params.id)); audit(req, 'Удалил новость', `#${int(req.params.id)}`); res.redirect('/admin/news?f=ok'); });
 
+/* ---- пользователи ---- */
 adm.get('/users', (req, res) => {
+  const q = str(req.query.q, 80);
   const list = db.prepare(`SELECT u.*, (SELECT COUNT(*) FROM servers s WHERE s.owner_id = u.id) AS servers,
-    (SELECT COALESCE(SUM(amount), 0) FROM orders o WHERE o.user_id = u.id AND o.status = 'paid') AS spent FROM users u ORDER BY u.id DESC`).all();
-  send(res, V.adm.users(req, { list, flash: flashOf(req) }));
+    (SELECT COALESCE(SUM(amount), 0) FROM orders o WHERE o.user_id = u.id AND o.status = 'paid') AS spent
+    FROM users u WHERE (? = '' OR u.email LIKE ? OR u.name LIKE ?) ORDER BY u.id DESC LIMIT 500`).all(q, like(q), like(q));
+  send(res, V.adm.users(req, { list, q, flash: flashOf(req) }));
 });
+const userEmail = (id) => db.prepare('SELECT email FROM users WHERE id = ?').get(id)?.email || `#${id}`;
 adm.post('/users/:id/role', (req, res) => {
-  if (int(req.params.id) !== req.user.id) db.prepare(`UPDATE users SET role = CASE role WHEN 'admin' THEN 'user' ELSE 'admin' END WHERE id = ?`).run(int(req.params.id));
-  res.redirect('/admin/users?f=ok');
+  const id = int(req.params.id);
+  if (id !== req.user.id) { db.prepare(`UPDATE users SET role = CASE role WHEN 'admin' THEN 'user' ELSE 'admin' END WHERE id = ?`).run(id); audit(req, 'Изменил роль', userEmail(id)); }
+  res.redirect(backTo(req, '/admin/users?f=ok'));
 });
 adm.post('/users/:id/ban', (req, res) => {
-  if (int(req.params.id) !== req.user.id) db.prepare('UPDATE users SET banned = 1 - banned WHERE id = ?').run(int(req.params.id));
-  res.redirect('/admin/users?f=ok');
+  const id = int(req.params.id);
+  if (id !== req.user.id) { db.prepare('UPDATE users SET banned = 1 - banned WHERE id = ?').run(id); audit(req, 'Бан / разбан', userEmail(id)); }
+  res.redirect(backTo(req, '/admin/users?f=ok'));
+});
+adm.post('/users/:id/password', (req, res) => {
+  const id = int(req.params.id);
+  const pw = String(req.body.password || '');
+  if (pw.length >= 8) { db.prepare('UPDATE users SET pass = ? WHERE id = ?').run(auth.hashPassword(pw), id); audit(req, 'Сменил пароль пользователю', userEmail(id)); }
+  res.redirect(`/admin/users?f=${pw.length >= 8 ? 'saved' : 'shortpw'}`);
 });
 
+/* ---- журнал ---- */
+adm.get('/log', (req, res) => {
+  const list = db.prepare('SELECT l.*, u.email AS admin_email FROM admin_log l LEFT JOIN users u ON u.id = l.admin_id ORDER BY l.id DESC LIMIT 500').all();
+  send(res, V.adm.log(req, { list }));
+});
+
+/* ---- настройки ---- */
 const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
   send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json` } }));
 });
 adm.post('/settings', (req, res) => {
-  for (const k of SETTING_KEYS) if (k in req.body) settings.set(k, str(req.body[k], 300));
+  const changed = SETTING_KEYS.filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));
+  for (const k of changed) settings.set(k, str(req.body[k], 300));
+  if (changed.length) audit(req, 'Изменил настройки', changed.map((k) => (/secret|key/.test(k) ? `${k} (скрыто)` : k)).join(', '));
   res.redirect('/admin/settings?f=saved');
 });
 

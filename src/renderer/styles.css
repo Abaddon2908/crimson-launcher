@@ -231,7 +231,10 @@ body.no-anim *, body.no-anim *::before, body.no-anim *::after { animation: none 
 .srv-icon { width: 48px; height: 48px; border-radius: 12px; flex: none; image-rendering: pixelated; background: url('assets/bg-night.jpg') center / cover; }
 .srv-body { flex: 1; min-width: 0; }
 .srv-body b { display: flex; align-items: center; gap: 8px; font-size: 14px; }
-.srv-body b span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-body b .srv-name { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srv-body b .badge { flex: none; white-space: nowrap; height: 20px; padding: 0 7px; font-size: 10.5px; }
+.srv-stats > * { flex: none; }
+.srv-stats .ver { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .srv-body small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .srv-stats { display: flex; gap: 10px; margin-top: 6px; font-size: 11.5px; color: var(--muted); font-weight: 600; align-items: center; white-space: nowrap; overflow: hidden; }
 .strip .srv-stats .ver { display: none; }
@@ -409,3 +412,5 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .inst-card.selected::after { box-shadow: inset 0 0 0 2px rgba(196,116,124,.75); }
 .inst-empty { grid-column: 1 / -1; }
 .page { padding-left: 4px; margin-left: -4px; }
+.strip-empty { grid-column: 1 / -1; padding: 18px 20px; color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.strip-empty .link { font-size: 13px; }

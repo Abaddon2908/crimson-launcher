@@ -20,12 +20,35 @@
     if (conf && !confirm(conf.dataset.confirm)) { e.preventDefault(); return; }
     const pr = e.target.closest('[data-prompt]');
     if (pr) {
-      const v = prompt(pr.dataset.prompt, '');
-      if (v === null) { e.preventDefault(); return; }
-      const inp = pr.form.querySelector('input[name="reason"]');
+      const v = prompt(pr.dataset.prompt, pr.dataset.promptDefault || '');
+      if (v === null || (pr.dataset.promptField && pr.dataset.promptField !== 'reason' && !v.trim())) { e.preventDefault(); return; }
+      const inp = pr.form.querySelector(`input[name="${pr.dataset.promptField || 'reason'}"]`);
       if (inp) inp.value = v;
     }
+    const ds = e.target.closest('[data-days-set]');
+    if (ds) {
+      e.preventDefault();
+      const inp = document.querySelector('input[name="days"]');
+      if (inp) inp.value = ds.dataset.daysSet;
+    }
   });
+
+  // админка → выдать услугу: поля баннера и срок по умолчанию для выбранной услуги
+  const kinds = document.querySelectorAll('input[name="kind"]');
+  if (kinds.length) {
+    const fields = document.querySelector('.banner-fields');
+    const days = document.querySelector('input[name="days"]');
+    let touched = false;
+    if (days) days.addEventListener('input', () => { touched = true; });
+    const upd = (initial) => {
+      const k = document.querySelector('input[name="kind"]:checked');
+      if (!k) return;
+      if (fields) fields.hidden = k.value !== 'banner';
+      if (days && !touched && !initial) days.value = k.dataset.days;
+    };
+    kinds.forEach((k) => k.addEventListener('change', () => upd(false)));
+    upd(true);
+  }
 
   // страница покупки: поля баннера и итоговая сумма
   const picks = document.querySelectorAll('input[name="product_id"]');

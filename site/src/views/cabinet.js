@@ -1,6 +1,7 @@
 const { html, fmt } = require('./html');
 const { layout, icon, csrfField } = require('./layout');
 const { favicon, statusDot } = require('./public');
+const { KINDS } = require('../db');
 
 const STATUS = { pending: ['На модерации', 'warn'], approved: ['Опубликован', 'ok'], rejected: ['Отклонён', 'bad'] };
 const ORDER = { pending: ['Ожидает оплаты', 'warn'], paid: ['Оплачен', 'ok'], cancelled: ['Отменён', 'bad'] };
@@ -31,7 +32,7 @@ function servers(req, { list, flash }) {
             <span class="badge ${STATUS[s.status][1]}">${STATUS[s.status][0]}</span>
             <span class="muted small">${statusDot(s)} ${s.online ? `${s.players}/${s.max_players}` : 'офлайн'}</span>
             <span class="muted small">${icon('star')} ${s.votes} за месяц</span>
-            ${s.promo_until ? html`<span class="badge gold">PROMO до ${fmt.date(s.promo_until)}</span>` : ''}
+            ${Object.entries(s.services || {}).map(([k, ends]) => html`<span class="badge ${k === 'promo' || k === 'ingame' ? 'gold' : 'red'}">${KINDS[k]?.short || k} до ${fmt.date(ends)}</span>`)}
           </div>
           ${s.status === 'rejected' && s.reject_reason ? html`<div class="err-box small">Причина: ${s.reject_reason}</div>` : ''}
         </div>

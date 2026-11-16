@@ -4,8 +4,5 @@
   "tagline": "Играй красиво.",
   "site": "https://nlauncher.ru",
   "feedUrl": "https://nlauncher.ru/api/launcher/feed.json",
-  "featuredServers": [
-    { "name": "Hypixel", "address": "mc.hypixel.net", "tag": "Мини-игры" },
-    { "name": "2b2t", "address": "2b2t.org", "tag": "Анархия" }
-  ]
+  "featuredServers": []
 }
