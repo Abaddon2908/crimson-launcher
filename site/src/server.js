@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
+const compression = require('compression');
 
 const { db, settings, now, DAY, KINDS, topServers, activeBanner, markPaid, monthStart, nextFreeStart, activeServices, ingameServers, logAdmin } = require('./db');
 const auth = require('./auth');
@@ -10,6 +11,7 @@ const pinger = require('./pinger');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const { safeUrl } = require('./views/html');
+const { serverPath, slugify } = require('./seo');
 const V = { pub: require('./views/public'), cab: require('./views/cabinet'), adm: require('./views/admin') };
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -48,6 +50,7 @@ function latestLauncher() {
 
 const app = express();
 app.disable('x-powered-by');
+app.use(compression()); // gzip: страницы и стили грузятся в 3–5 раз быстрее
 app.set('trust proxy', process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY : false);
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '7d' }));
 app.use('/downloads', express.static(DOWNLOADS, { maxAge: '1h', dotfiles: 'deny', setHeaders: (res) => res.set('Content-Disposition', 'attachment') }));
@@ -57,6 +60,8 @@ app.use((req, res, next) => {
   res.set({ 'X-Frame-Options': 'DENY', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'strict-origin-when-cross-origin' });
   next();
 });
+// закрытые разделы — запрет индексации и заголовком (на случай, если поисковик пришёл по ссылке)
+app.use(/^\/(admin|cabinet|login|register|pay)(\/|$)/, (req, res, next) => { res.set('X-Robots-Tag', 'noindex, nofollow'); next(); });
 app.use(auth.sessions);
 app.use(auth.csrf);
 
@@ -96,7 +101,7 @@ function bannerData() {
   const b = activeBanner();
   if (b) {
     const url = safeUrl(b.banner_url);
-    return { paid: true, title: b.banner_title || b.server_name, text: b.banner_text, image: safeUrl(b.banner_image), href: url || `/server/${b.server_id}`, external: Boolean(url), cta: url ? 'Подробнее' : 'Смотреть сервер', address: b.address };
+    return { paid: true, title: b.banner_title || b.server_name, text: b.banner_text, image: safeUrl(b.banner_image), href: url || serverPath({ id: b.server_id, name: b.server_name }), external: Boolean(url), cta: url ? 'Подробнее' : 'Смотреть сервер', address: b.address };
   }
   return { paid: false, title: settings.get('default_banner_title'), text: settings.get('default_banner_text'), image: '/assets/bg-banner.jpg', href: '/ads', external: false, cta: 'Разместить рекламу' };
 }
@@ -124,6 +129,9 @@ app.get('/server/:id', (req, res) => {
   const s = loadServer(int(req.params.id));
   const owner = s && req.user && (req.user.id === s.owner_id || req.user.role === 'admin');
   if (!s || (s.status !== 'approved' && !owner)) return send(res, V.pub.message(req, 'Сервер не найден', 'Возможно, он ещё на модерации или был удалён.'), 404);
+  // единый адрес страницы: /server/12 и /server/12-old-name → 301 на /server/12-craftlands
+  const canonical = serverPath(s);
+  if (req.path !== canonical) return res.redirect(301, canonical + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''));
   const range = ['day', 'week', 'month'].includes(req.query.range) ? req.query.range : 'day';
   const ms = { day: DAY, week: 7 * DAY, month: 30 * DAY }[range];
   const votes = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, monthStart()).n;
@@ -146,7 +154,7 @@ app.post('/server/:id/vote', limiter(60_000, 10), (req, res) => {
   const s = db.prepare(`SELECT * FROM servers WHERE id = ? AND status = 'approved'`).get(int(req.params.id));
   if (!s) return res.redirect('/');
   const nick = str(req.body.nickname, 16);
-  const back = (q) => res.redirect(`/server/${s.id}?${q}`);
+  const back = (q) => res.redirect(`${serverPath(s)}?${q}`);
   if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) return back(`error=${encodeURIComponent('Ник: 3–16 символов, латиница, цифры и _')}`);
   const since = now() - DAY;
   const dup = db.prepare('SELECT ts FROM votes WHERE server_id = ? AND (lower(nickname) = lower(?) OR ip = ?) AND ts > ? ORDER BY ts DESC LIMIT 1').get(s.id, nick, req.ip, since);
@@ -160,6 +168,55 @@ app.post('/server/:id/vote', limiter(60_000, 10), (req, res) => {
 });
 
 app.get('/ads', (req, res) => send(res, V.pub.ads(req, { products: productsWithAvailability(), stats: siteStats() })));
+
+/* ======================= SEO: robots, sitemap, манифест ======================= */
+const siteBase = () => settings.get('site_url').replace(/\/$/, '');
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send([
+    'User-agent: *',
+    'Allow: /',
+    'Disallow: /admin',
+    'Disallow: /cabinet',
+    'Disallow: /login',
+    'Disallow: /register',
+    'Disallow: /pay/',
+    'Disallow: /*?q=',
+    'Disallow: /*range=',
+    'Clean-param: range /server/',
+    'Clean-param: q /',
+    '',
+    `Sitemap: ${siteBase()}/sitemap.xml`,
+    '',
+  ].join('\n'));
+});
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteBase();
+  const day = (t) => new Date(t || now()).toISOString().slice(0, 10);
+  const x = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const urls = [
+    { loc: '/', changefreq: 'hourly', priority: '1.0', lastmod: day() },
+    { loc: '/launcher', changefreq: 'weekly', priority: '0.8' },
+    { loc: '/ads', changefreq: 'weekly', priority: '0.6' },
+  ];
+  const tagCounts = {};
+  for (const s of topServers({ limit: 5000 })) {
+    urls.push({ loc: serverPath(s), changefreq: 'daily', priority: s.rank <= 20 ? '0.8' : '0.6', lastmod: day(s.last_ping || s.created) });
+    for (const t of s.tagList) tagCounts[t] = (tagCounts[t] || 0) + 1;
+  }
+  for (const t of Object.keys(tagCounts)) urls.push({ loc: `/?tag=${encodeURIComponent(t)}`, changefreq: 'daily', priority: '0.7' });
+  res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(
+    '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    + urls.map((u) => `  <url><loc>${x(base + u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}<changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`).join('\n')
+    + '\n</urlset>\n',
+  );
+});
+app.get('/site.webmanifest', (req, res) => {
+  res.type('application/manifest+json').set('Cache-Control', 'public, max-age=86400').send(JSON.stringify({
+    name: settings.get('site_name'), short_name: 'NLauncher', lang: 'ru', start_url: '/', display: 'standalone',
+    background_color: '#0c0a0b', theme_color: '#0c0a0b',
+    icons: [{ src: '/assets/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/assets/icon.png', sizes: '512x512', type: 'image/png' }],
+  }));
+});
 app.get('/launcher', (req, res) => {
   const l = latestLauncher();
   send(res, V.pub.launcher(req, { downloadUrl: l ? l.setup : LAUNCHER_DOWNLOAD, portableUrl: l?.portable || null, version: l?.version || null, size: l?.size || 0 }));
@@ -394,7 +451,7 @@ const flashOf = (req) => ({
 }[req.query.f] || '');
 const audit = (req, action, details) => logAdmin(req.user.id, action, details);
 const serverName = (id) => db.prepare('SELECT name FROM servers WHERE id = ?').get(id)?.name || `#${id}`;
-const like = (q) => `%${q}%`;
+const like = (q) => `%${String(q).toLowerCase()}%`; // вместе с ulower() — поиск без учёта регистра и для кириллицы
 
 adm.get('/', (req, res) => {
   const t = now();
@@ -425,7 +482,7 @@ adm.get('/servers', (req, res) => {
   const q = str(req.query.q, 80);
   const list = db.prepare(`SELECT s.*, u.email AS owner_email, (SELECT COUNT(*) FROM votes v WHERE v.server_id = s.id AND v.ts >= ?) AS votes
     FROM servers s LEFT JOIN users u ON u.id = s.owner_id
-    WHERE (? = '' OR s.status = ?) AND (? = '' OR s.name LIKE ? OR s.address LIKE ? OR u.email LIKE ?)
+    WHERE (? = '' OR s.status = ?) AND (? = '' OR ulower(s.name) LIKE ? OR ulower(s.address) LIKE ? OR ulower(u.email) LIKE ?)
     ORDER BY (s.status = 'pending') DESC, s.created DESC LIMIT 500`).all(monthStart(), status, status, q, like(q), like(q), like(q))
     .map((s) => ({ ...s, services: activeServices(s.id) }));
   send(res, V.adm.servers(req, { list, status, q, flash: flashOf(req) }));
@@ -543,7 +600,7 @@ function ordersQuery(status, q, limit = 300) {
   const idq = /^#?\d+$/.test(q) ? int(q.replace('#', '')) : -1;
   return db.prepare(`SELECT o.*, s.name AS server_name, u.email AS user_email FROM orders o
     LEFT JOIN servers s ON s.id = o.server_id LEFT JOIN users u ON u.id = o.user_id
-    WHERE ${cond} AND (? = '' OR o.id = ? OR s.name LIKE ? OR s.address LIKE ? OR u.email LIKE ?) ORDER BY o.id DESC LIMIT ${limit}`)
+    WHERE ${cond} AND (? = '' OR o.id = ? OR ulower(s.name) LIKE ? OR ulower(s.address) LIKE ? OR ulower(u.email) LIKE ?) ORDER BY o.id DESC LIMIT ${limit}`)
     .all(...params, q, idq, like(q), like(q), like(q));
 }
 adm.get('/orders', (req, res) => {
@@ -620,7 +677,7 @@ adm.get('/users', (req, res) => {
   const q = str(req.query.q, 80);
   const list = db.prepare(`SELECT u.*, (SELECT COUNT(*) FROM servers s WHERE s.owner_id = u.id) AS servers,
     (SELECT COALESCE(SUM(amount), 0) FROM orders o WHERE o.user_id = u.id AND o.status = 'paid') AS spent
-    FROM users u WHERE (? = '' OR u.email LIKE ? OR u.name LIKE ?) ORDER BY u.id DESC LIMIT 500`).all(q, like(q), like(q));
+    FROM users u WHERE (? = '' OR ulower(u.email) LIKE ? OR ulower(u.name) LIKE ?) ORDER BY u.id DESC LIMIT 500`).all(q, like(q), like(q));
   send(res, V.adm.users(req, { list, q, flash: flashOf(req) }));
 });
 const userEmail = (id) => db.prepare('SELECT email FROM users WHERE id = ?').get(id)?.email || `#${id}`;
@@ -684,10 +741,10 @@ adm.get('/log', (req, res) => {
 });
 
 /* ---- настройки ---- */
-const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key'];
+const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
-  send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json` } }));
+  send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));
 });
 adm.post('/settings', (req, res) => {
   const changed = SETTING_KEYS.filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));

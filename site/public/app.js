@@ -115,3 +115,17 @@
   const nav = a && a.parentElement;
   if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2;
 })();
+
+// уведомление о cookie (показывается, если включены счётчики)
+(function () {
+  const c = document.getElementById('cookie');
+  if (!c) return;
+  let seen = false;
+  try { seen = localStorage.getItem('cookieOk') === '1'; } catch { /* приватный режим */ }
+  if (seen) return;
+  c.hidden = false;
+  document.getElementById('cookieOk').addEventListener('click', () => {
+    c.hidden = true;
+    try { localStorage.setItem('cookieOk', '1'); } catch { /* ничего */ }
+  });
+})();

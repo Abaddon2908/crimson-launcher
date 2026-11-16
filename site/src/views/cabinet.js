@@ -1,4 +1,5 @@
 const { html, fmt } = require('./html');
+const { serverPath } = require('../seo');
 const { layout, icon, csrfField } = require('./layout');
 const { favicon, statusDot } = require('./public');
 const { KINDS } = require('../db');
@@ -26,7 +27,7 @@ function servers(req, { list, flash }) {
       <div class="card own">
         ${favicon(s)}
         <div class="own-main">
-          <b><a href="/server/${s.id}">${s.name}</a></b>
+          <b><a href="${serverPath(s)}">${s.name}</a></b>
           <small class="muted">${s.address}</small>
           <div class="row">
             <span class="badge ${STATUS[s.status][1]}">${STATUS[s.status][0]}</span>

@@ -7,6 +7,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 fs.mkdirSync(DATA_DIR, { recursive: true });
 const db = new DatabaseSync(path.join(DATA_DIR, 'monitoring.db'));
 db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+// нижний регистр с поддержкой кириллицы (встроенный lower() в SQLite — только латиница)
+db.function('ulower', { deterministic: true }, (s) => (s == null ? null : String(s).toLowerCase()));
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
@@ -161,7 +163,9 @@ const settings = {
 /** Голоса за текущий календарный месяц */
 function monthStart() { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).getTime(); }
 
-/** Список серверов для топа: промо сверху, затем по голосам за месяц */
+/** Список серверов для топа: промо сверху, затем по голосам за месяц.
+ *  Поиск и фильтр по режиму — в JS: SQLite не умеет без учёта регистра для кириллицы.
+ *  rank — место в общем топе (не в отфильтрованном списке). */
 function topServers({ q = '', tag = '', limit = 100 } = {}) {
   const t = now();
   const rows = db.prepare(`
@@ -171,11 +175,14 @@ function topServers({ q = '', tag = '', limit = 100 } = {}) {
       EXISTS (SELECT 1 FROM orders o WHERE o.server_id = s.id AND o.status = 'paid' AND o.kind = 'highlight' AND o.starts <= ? AND o.ends > ?) AS highlight
     FROM servers s
     WHERE s.status = 'approved'
-      AND (? = '' OR s.name LIKE ? OR s.address LIKE ? OR s.description LIKE ?)
-      AND (? = '' OR (',' || lower(s.tags) || ',') LIKE ?)
-    ORDER BY promo DESC, votes DESC, s.online DESC, s.players DESC
-    LIMIT ?`).all(monthStart(), t, t, t, t, q, `%${q}%`, `%${q}%`, `%${q}%`, tag, `%,${tag.toLowerCase()},%`, limit);
-  return rows.map((r, i) => ({ ...r, rank: i + 1, tagList: r.tags.split(',').map((x) => x.trim()).filter(Boolean) }));
+    ORDER BY promo DESC, votes DESC, s.online DESC, s.players DESC`).all(monthStart(), t, t, t, t);
+  const ql = String(q).trim().toLowerCase();
+  const tl = String(tag).trim().toLowerCase();
+  return rows
+    .map((r, i) => ({ ...r, rank: i + 1, tagList: r.tags.split(',').map((x) => x.trim()).filter(Boolean) }))
+    .filter((r) => !ql || [r.name, r.address, r.description, r.tags].some((v) => String(v || '').toLowerCase().includes(ql)))
+    .filter((r) => !tl || r.tagList.some((x) => x.toLowerCase() === tl))
+    .slice(0, limit);
 }
 
 function activeBanner() {

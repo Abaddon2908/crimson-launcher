@@ -1,4 +1,5 @@
 const { html, fmt } = require('./html');
+const { serverPath } = require('../seo');
 const { layout, icon, csrfField } = require('./layout');
 const { favicon, statusDot } = require('./public');
 const { ORDER, STATUS, PROVIDER } = require('./cabinet');
@@ -103,7 +104,7 @@ function serverDetail(req, { s, owner, services, orders, votes, voteStats, flash
       <div class="col">
         <div class="card pad">
           <div class="row between"><div class="row">${favicon(s, 'fav')}<div><b>${s.name}</b><br/><small class="muted">${s.address}</small></div></div>
-            <div class="row"><a class="btn ghost sm" href="/server/${s.id}" target="_blank">На сайте</a><a class="btn ghost sm" href="/cabinet/servers/${s.id}">${icon('edit')}Редактировать</a></div></div>
+            <div class="row"><a class="btn ghost sm" href="${serverPath(s)}" target="_blank">На сайте</a><a class="btn ghost sm" href="/cabinet/servers/${s.id}">${icon('edit')}Редактировать</a></div></div>
           <dl class="kv">
             <dt>Статус</dt><dd><span class="badge ${STATUS[s.status][1]}">${STATUS[s.status][0]}</span>${s.reject_reason ? html` <small class="muted">${s.reject_reason}</small>` : ''}</dd>
             <dt>Онлайн</dt><dd>${statusDot(s)} ${s.online ? `${s.players} / ${s.max_players}, ${s.ping_ms} мс` : 'офлайн'} · <small class="muted">${fmt.ago(s.last_ping)}</small></dd>
@@ -122,12 +123,23 @@ function serverDetail(req, { s, owner, services, orders, votes, voteStats, flash
         <div class="card pad">
           <div class="card-head"><h3>Услуги</h3><a class="btn primary sm" href="/admin/grant?server=${s.id}">${icon('bolt')}Выдать услугу</a></div>
           ${Object.keys(services).length ? html`<div class="badges">${kindBadges(services)}</div>` : html`<p class="muted">Активных услуг нет.</p>`}
-          ${orders.length ? html`<table class="table compact" style="margin-top:12px"><tbody>${orders.map((o) => html`<tr>
-            <td class="muted">#${o.id}</td><td>${o.title}${o.note ? html`<br/><small class="muted">${o.note}</small>` : ''}</td><td>${fmt.rub(o.amount)}</td>
-            <td><span class="badge ${ORDER[o.status][1]}">${ORDER[o.status][0]}</span></td>
-            <td class="small muted">${o.status === 'paid' ? `${fmt.date(o.starts)} — ${fmt.date(o.ends)}` : fmt.date(o.created)}</td>
-            <td class="right nowrap">${o.status === 'paid' && o.ends > Date.now() ? html`${btnPrompt(req, `/admin/orders/${o.id}/extend`, '+ дни', 'days', 'На сколько дней продлить? (можно минус, чтобы сократить)', 'ghost', '7')}${btnPost(req, `/admin/orders/${o.id}/end`, 'Завершить', 'ghost danger', '', 'Завершить показ прямо сейчас?')}` : ''}</td>
-          </tr>`)}</tbody></table>` : ''}
+          ${orders.length ? html`<div class="svc-list">${orders.map((o) => {
+            const live = o.status === 'paid' && o.ends > Date.now();
+            return html`
+            <div class="svc ${live ? 'live' : ''}">
+              <div class="svc-main">
+                <b>${o.title.replace(/ \(выдано админом\)$/, '')}</b>
+                <div class="svc-meta">
+                  <span class="badge ${o.status === 'paid' && !live ? '' : ORDER[o.status][1]}">${o.status === 'paid' && !live ? 'Завершён' : ORDER[o.status][0]}</span>
+                  <span>${o.status === 'paid' ? fmt.period(o.starts, o.ends) : fmt.date(o.created)}</span>
+                  <span>${o.provider === 'manual' ? 'выдано админом' : fmt.rub(o.amount)}</span>
+                  <span class="muted">#${o.id}</span>
+                </div>
+                ${o.note ? html`<small class="muted">${o.note}</small>` : ''}
+              </div>
+              ${live ? html`<div class="svc-actions">${btnPrompt(req, `/admin/orders/${o.id}/extend`, '+ дни', 'days', 'На сколько дней продлить? (можно минус, чтобы сократить)', 'ghost', '7')}${btnPost(req, `/admin/orders/${o.id}/end`, 'Завершить', 'ghost danger', '', 'Завершить показ прямо сейчас?')}</div>` : ''}
+            </div>`;
+          })}</div>` : ''}
         </div>
       </div>
 
@@ -336,6 +348,23 @@ function settingsPage(req, { s, flash, hooks }) {
         <p class="muted small">Лента для лаунчера (уже прописана в NLauncher):</p>
         <pre class="code">${hooks.feed}</pre>
         <p class="muted small">Оттуда лаунчер берёт баннер, новости, PROMO, топ и сервера для списка «Сетевая игра».</p>
+      </div>
+      <div class="card pad full"><h3>SEO и метрики</h3>
+        <div class="settings-grid inner">
+          <div>
+            ${f('yandex_metrika_id', 'Яндекс Метрика — номер счётчика', '12345678')}
+            <p class="muted small">Создайте счётчик на <a class="link" href="https://metrika.yandex.ru" target="_blank" rel="noopener">metrika.yandex.ru</a> → скопируйте его номер. Вебвизор и карта кликов включаются автоматически.</p>
+            ${f('google_analytics_id', 'Google Analytics — идентификатор', 'G-XXXXXXXXXX')}
+            <p class="muted small"><a class="link" href="https://analytics.google.com" target="_blank" rel="noopener">analytics.google.com</a> → Администратор → Потоки данных → «Идентификатор потока».</p>
+          </div>
+          <div>
+            ${f('yandex_verification', 'Яндекс Вебмастер — код подтверждения', 'только значение content')}
+            <p class="muted small"><a class="link" href="https://webmaster.yandex.ru" target="_blank" rel="noopener">webmaster.yandex.ru</a> → добавить сайт → способ «Мета-тег» → скопируйте только значение <code>content="…"</code>.</p>
+            ${f('google_verification', 'Google Search Console — код подтверждения', 'только значение content')}
+            <p class="muted small"><a class="link" href="https://search.google.com/search-console" target="_blank" rel="noopener">Search Console</a> → «Префикс URL» → способ «Тег HTML» → значение <code>content="…"</code>.</p>
+          </div>
+        </div>
+        <p class="muted small">Карта сайта для вебмастеров: <code>${hooks.sitemap}</code> · robots.txt: <code>${hooks.robots}</code>. Когда включены счётчики, посетители видят уведомление о cookie.</p>
       </div>
       <div class="row end full"><button class="btn primary">Сохранить настройки</button></div>
     </form>`, { flash });

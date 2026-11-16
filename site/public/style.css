@@ -159,7 +159,7 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
 
 .banner { display: block; position: relative; padding: 26px 30px; border-radius: var(--r); margin-bottom: 34px; overflow: hidden; background: linear-gradient(90deg, rgba(12,10,11,.92), rgba(12,10,11,.35)), url('/assets/bg-banner.jpg') center / cover; transition: .35s var(--ease); }
 .banner:hover { transform: translateY(-2px); }
-.banner h3 { font: 600 20px var(--display); margin: 6px 0 6px; max-width: 640px; }
+.banner h3, .banner .banner-title { font: 600 20px var(--display); margin: 6px 0 6px; max-width: 640px; }
 .banner p { color: #b8acae; max-width: 600px; }
 .banner .cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; color: var(--accent-2); font-weight: 700; }
 .banner .cta .ic { width: 15px; transition: transform .3s var(--ease); }
@@ -437,3 +437,29 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
 
 /* единый отступ между блоками админки (вертикальные отступы схлопываются, двойных не будет) */
 .admin-main > * + * { margin-top: 18px; }
+.cookie { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 150; width: min(720px, calc(100% - 24px)); display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: 14px; background: rgba(28, 22, 24, .97); backdrop-filter: blur(16px); box-shadow: 0 16px 40px -12px #000; font-size: 13.5px; color: var(--muted); }
+.cookie span { flex: 1; }
+@media (max-width: 680px) { .cookie { flex-direction: column; align-items: stretch; text-align: center; } }
+.settings-grid.inner { grid-template-columns: 1fr 1fr; gap: 0 24px; }
+@media (max-width: 1000px) { .settings-grid.inner { grid-template-columns: 1fr; } }
+
+/* админка → услуги сервера: список вместо тесной таблицы */
+.svc-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.svc { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(255,255,255,.03); }
+.svc.live { background: rgba(255,255,255,.05); box-shadow: inset 3px 0 0 var(--accent-2); }
+.svc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.svc-main b { font-size: 14.5px; }
+.svc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 13px; color: var(--muted); }
+.svc-meta > span { white-space: nowrap; }
+.svc-actions { display: flex; gap: 6px; flex: none; }
+@media (max-width: 680px) { .svc { flex-direction: column; align-items: stretch; } .svc-actions .inline, .svc-actions .btn { flex: 1; } .svc-actions .btn { width: 100%; } }
+
+/* подсветка строки таблицы со скруглёнными краями */
+.table tbody tr:hover td:first-child { border-radius: 10px 0 0 10px; }
+.table tbody tr:hover td:last-child { border-radius: 0 10px 10px 0; }
+.table tbody tr:hover { background: none; }
+.table tbody tr:hover td { background: var(--hover); }
+.table td.nowrap, .table td .nowrap { white-space: nowrap; }
+
+/* доступность: мелкий второстепенный текст контрастнее (Lighthouse) */
+:root { --dim: #877b7d; }

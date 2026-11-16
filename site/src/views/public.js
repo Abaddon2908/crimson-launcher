@@ -1,8 +1,10 @@
 const { html, raw, fmt, safeUrl } = require('./html');
 const { layout, icon, csrfField } = require('./layout');
+const { serverPath, abs, siteUrl } = require('../seo');
+const { settings } = require('../db');
 
 const favicon = (s, cls = 'fav') => (s.favicon && s.favicon.startsWith('data:image/')
-  ? html`<img class="${cls}" src="${s.favicon}" alt="" loading="lazy" />`
+  ? html`<img class="${cls}" src="${s.favicon}" alt="Иконка сервера ${s.name}" loading="lazy" width="64" height="64" />`
   : html`<span class="${cls} fav-ph">${(s.name || '?')[0].toUpperCase()}</span>`);
 
 const statusDot = (s) => html`<span class="dot ${s.online ? 'ok' : 'bad'}"></span>`;
@@ -14,7 +16,7 @@ function playersBar(s) {
 
 function serverRow(s) {
   return html`
-  <a class="srow ${s.promo ? 'promo' : ''} ${s.highlight ? 'hl' : ''}" href="/server/${s.id}">
+  <a class="srow ${s.promo ? 'promo' : ''} ${s.highlight ? 'hl' : ''}" href="${serverPath(s)}">
     <span class="rank">${s.promo ? icon('bolt') : s.rank}</span>
     ${favicon(s)}
     <span class="srow-main">
@@ -33,13 +35,33 @@ function serverRow(s) {
 
 function home(req, { servers, banner, stats, q, tag, tags, news }) {
   const b = banner;
+  const site = settings.get('site_name');
+  const base = siteUrl();
+  const jsonld = [
+    {
+      '@context': 'https://schema.org', '@type': 'WebSite', name: site, url: `${base}/`, inLanguage: 'ru',
+      potentialAction: { '@type': 'SearchAction', target: { '@type': 'EntryPoint', urlTemplate: `${base}/?q={search_term_string}` }, 'query-input': 'required name=search_term_string' },
+    },
+    { '@context': 'https://schema.org', '@type': 'Organization', name: 'NeoDev', url: `${base}/`, logo: `${base}/assets/icon.png` },
+    servers.length && {
+      '@context': 'https://schema.org', '@type': 'ItemList', name: tag ? `Сервера Minecraft: ${tag}` : 'Топ серверов Minecraft',
+      itemListElement: servers.slice(0, 30).map((sv, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(serverPath(sv)), name: sv.name })),
+    },
+  ];
+  const h1 = tag ? `Сервера Minecraft: ${tag}` : 'Лучшие сервера Minecraft';
   return layout(req, {
-    title: '',
+    title: tag ? `${h1} — IP-адреса, онлайн и рейтинг` : '',
+    description: tag
+      ? `Сервера Minecraft с режимом «${tag}»: IP-адреса, онлайн в реальном времени, голосование и рейтинг. ${stats.servers} серверов в мониторинге.`
+      : `Топ серверов Minecraft: ${stats.servers} серверов с IP-адресами, онлайн в реальном времени, графики и голосование. Выживание, анархия, мини-игры и моды — найдите сервер по душе.`,
+    canonical: tag ? `/?tag=${encodeURIComponent(tag)}` : '/',
+    noindex: Boolean(q), // результаты поиска не индексируем
+    jsonld,
     body: html`
     <section class="hero">
       <div class="hero-in">
         <span class="eyebrow">Мониторинг NeoDev</span>
-        <h1>Лучшие сервера Minecraft</h1>
+        <h1>${h1}</h1>
         <p class="muted">Онлайн в реальном времени, честное голосование и быстрый вход через NLauncher.</p>
         <form class="hero-search" method="get" action="/">
           ${icon('search')}<input name="q" value="${q}" placeholder="Название, IP или режим…" />
@@ -56,7 +78,7 @@ function home(req, { servers, banner, stats, q, tag, tags, news }) {
 
     <a class="banner" href="${b.href}" ${b.external ? raw('target="_blank" rel="noopener sponsored"') : ''} style="${b.image ? `background-image:linear-gradient(90deg,rgba(12,10,11,.92),rgba(12,10,11,.35)),url('${encodeURI(b.image)}')` : ''}">
       <span class="ad-tag">${b.paid ? 'Реклама' : 'Рекламное место'}</span>
-      <h3>${b.title}</h3>
+      <p class="banner-title">${b.title}</p>
       <p>${b.text}</p>
       <span class="cta">${b.cta} ${icon('arrow')}</span>
     </a>
@@ -108,9 +130,27 @@ function chart(points) {
 
 function server(req, { s, votes, points, range, voted, error, owner, rank }) {
   const links = [['Сайт', safeUrl(s.website)], ['Discord', safeUrl(s.discord)]].filter((l) => l[1]);
+  const ver = s.version || s.game_version;
+  const desc = [
+    `${s.name} — сервер Minecraft${ver ? ` ${ver}` : ''}. IP: ${s.address}.`,
+    s.tags ? `Режимы: ${s.tags}.` : '',
+    s.online ? `Сейчас онлайн ${s.players} из ${s.max_players}.` : '',
+    (s.description || s.motd || '').replace(/\s+/g, ' ').slice(0, 140),
+  ].filter(Boolean).join(' ');
   return layout(req, {
-    title: s.name,
-    description: `${s.name} — ${s.address}. ${s.description}`.slice(0, 160),
+    title: `${s.name} — IP ${s.address}${ver ? `, Minecraft ${ver}` : ''}`,
+    description: desc,
+    canonical: serverPath(s),
+    image: safeUrl(s.banner) || undefined,
+    ogType: 'article',
+    noindex: s.status !== 'approved',
+    jsonld: [{
+      '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Топ серверов', item: abs('/') },
+        { '@type': 'ListItem', position: 2, name: s.name, item: abs(serverPath(s)) },
+      ],
+    }],
     body: html`
     <section class="srv-hero" style="${safeUrl(s.banner) ? `background-image:linear-gradient(0deg,rgba(12,10,11,.95),rgba(12,10,11,.2)),url('${encodeURI(safeUrl(s.banner))}')` : ''}">
       ${favicon(s, 'fav big')}
@@ -177,7 +217,8 @@ function server(req, { s, votes, points, range, voted, error, owner, rank }) {
 function ads(req, { products, stats }) {
   const kindIcon = { promo: 'bolt', banner: 'news', highlight: 'star', ingame: 'server' };
   return layout(req, {
-    title: 'Реклама',
+    title: 'Реклама Minecraft-сервера в мониторинге и лаунчере',
+    description: 'Продвижение Minecraft-сервера: PROMO в топе, баннер в NLauncher, выделение и сервер в списке «Сетевая игра» у игроков лаунчера. Оплата картой, ЮMoney или криптовалютой.',
     body: html`
     <section class="page-hero">
       <span class="eyebrow">Продвижение</span>
@@ -231,7 +272,15 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
 
 function launcher(req, { downloadUrl, portableUrl, version, size }) {
   return layout(req, {
-    title: 'NLauncher',
+    title: 'NLauncher — лаунчер Minecraft с модами, лицензией и офлайн-входом',
+    description: 'Скачать NLauncher — бесплатный лаунчер Minecraft для Windows: вход с лицензией и без, любые версии, Fabric, Quilt и Forge, моды из Modrinth в один клик, топ серверов.',
+    jsonld: [{
+      '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'NLauncher',
+      operatingSystem: 'Windows 10, Windows 11', applicationCategory: 'GameApplication',
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'RUB' },
+      downloadUrl: abs(downloadUrl), ...(version ? { softwareVersion: version } : {}),
+      author: { '@type': 'Organization', name: 'NeoDev' }, image: abs('/assets/icon.png'),
+    }],
     body: html`
     <section class="page-hero launcher-hero">
       <span class="eyebrow">NeoDev</span>
@@ -252,7 +301,7 @@ function launcher(req, { downloadUrl, portableUrl, version, size }) {
 }
 
 function message(req, title, text, status = 200) {
-  return layout(req, { title, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
+  return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
 module.exports = { home, server, ads, authForm, launcher, message, favicon, statusDot, chart };

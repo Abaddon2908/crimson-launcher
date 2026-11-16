@@ -43,22 +43,85 @@ const ICONS = {
 };
 const icon = (n, cls = '') => raw(`<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[n] || ''}</svg>`);
 
-function layout(req, { title, body, wide = false, flash = '', description = '' }) {
-  const site = settings.get('site_name');
+// Закрытые от поисковиков разделы
+const PRIVATE = /^\/(admin|cabinet|login|register|pay)(\/|$)/;
+const DEFAULT_DESC = 'Мониторинг серверов Minecraft: топ серверов с онлайном в реальном времени, голосование, IP-адреса и быстрый вход через NLauncher.';
+
+/** Счётчики и подтверждения прав (из админки → Настройки → SEO и метрики) */
+function analytics(s) {
+  const ym = /^\d{5,12}$/.test(s.yandex_metrika_id || '') ? s.yandex_metrika_id : '';
+  const ga = /^G-[A-Z0-9]{4,20}$/.test(s.google_analytics_id || '') ? s.google_analytics_id : '';
+  let out = '';
+  if (ym) {
+    out += `<script>(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};m[i].l=1*new Date();for(var j=0;j<document.scripts.length;j++){if(document.scripts[j].src===r){return;}}k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})(window,document,"script","https://mc.yandex.ru/metrika/tag.js","ym");ym(${ym},"init",{clickmap:true,trackLinks:true,accurateTrackBounce:true,webvisor:true});</script>`
+      + `<noscript><div><img src="https://mc.yandex.ru/watch/${ym}" style="position:absolute;left:-9999px" alt="" /></div></noscript>`;
+  }
+  if (ga) {
+    out += `<script async src="https://www.googletagmanager.com/gtag/js?id=${ga}"></script>`
+      + `<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${ga}');</script>`;
+  }
+  return { html: raw(out), enabled: Boolean(ym || ga) };
+}
+
+/**
+ * @param {object} o
+ *  title, description — уникальные для страницы
+ *  canonical — путь или полный адрес (по умолчанию текущий путь без параметров)
+ *  image — картинка для превью в соцсетях (по умолчанию /assets/og-image.png)
+ *  ogType — website | article | profile
+ *  jsonld — массив объектов schema.org
+ *  noindex — закрыть страницу от поисковиков
+ */
+function layout(req, { title, body, wide = false, flash = '', description = '', canonical, image, ogType = 'website', jsonld = [], noindex = false }) {
+  const s = settings.all();
+  const site = s.site_name;
+  const base = (s.site_url || '').replace(/\/$/, '');
+  const abs = (p) => (/^https?:\/\//.test(p || '') ? p : base + (p || '/'));
   const u = req.user;
-  const path = (req.baseUrl || "") + req.path; // внутри роутеров (/admin, /cabinet) req.path относительный
+  const path = (req.baseUrl || '') + req.path; // внутри роутеров (/admin, /cabinet) req.path относительный
+  const closed = noindex || PRIVATE.test(path);
+  const fullTitle = title ? `${title} — ${site}` : `${site} — топ серверов Minecraft`;
+  const desc = (description || DEFAULT_DESC).replace(/\s+/g, ' ').trim().slice(0, 300);
+  const url = abs(canonical || path);
+  const img = abs(image || '/assets/og-image.png');
+  const metrics = closed && PRIVATE.test(path) && path.startsWith('/admin') ? { html: '', enabled: false } : analytics(s);
+  const verify = (name, v) => (/^[\w-]{6,100}$/.test(v || '') ? html`<meta name="${name}" content="${v}" />` : '');
   const nav = (href, label) => html`<a href="${href}" class="${path === href || (href !== '/' && path.startsWith(href)) ? 'active' : ''}">${label}</a>`;
   return html`<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title ? `${title} — ${site}` : site}</title>
-  <meta name="description" content="${description || 'Топ Minecraft-серверов: онлайн, голосование, отзывы. Мониторинг от NeoDev и NLauncher.'}" />
-  <link rel="icon" href="/assets/icon.png" />
+  <title>${fullTitle}</title>
+  <meta name="description" content="${desc}" />
+  <meta name="robots" content="${closed ? 'noindex, nofollow' : 'index, follow, max-image-preview:large, max-snippet:-1'}" />
+  ${closed ? '' : html`<link rel="canonical" href="${url}" />`}
+  <meta property="og:type" content="${ogType}" />
+  <meta property="og:site_name" content="${site}" />
+  <meta property="og:locale" content="ru_RU" />
+  <meta property="og:title" content="${title || fullTitle}" />
+  <meta property="og:description" content="${desc}" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:image" content="${img}" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title || fullTitle}" />
+  <meta name="twitter:description" content="${desc}" />
+  <meta name="twitter:image" content="${img}" />
+  <meta name="theme-color" content="#0c0a0b" />
+  ${verify('yandex-verification', s.yandex_verification)}
+  ${verify('google-site-verification', s.google_verification)}
+  <link rel="icon" type="image/svg+xml" href="/assets/logo-mark.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="${asset('style.css')}" />
+  ${closed ? '' : jsonld.filter(Boolean).map((j) => raw(`<script type="application/ld+json">${JSON.stringify(j).replace(/</g, '\\u003c')}</script>`))}
+  ${metrics.html}
 </head>
 <body>
   <div class="bg" aria-hidden="true"><div class="bg-img"></div></div>
@@ -90,6 +153,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '' }
     <span>© ${new Date().getFullYear()} NeoDev · ${site}</span>
     <span class="muted">Не является официальным продуктом Minecraft. Не одобрено и не связано с Mojang или Microsoft.</span>
   </footer>
+  ${metrics.enabled ? html`<div class="cookie" id="cookie" hidden><span>Мы используем cookie и сервисы веб-аналитики, чтобы сайт работал лучше. Продолжая пользоваться сайтом, вы соглашаетесь с этим.</span><button class="btn primary sm" id="cookieOk">Понятно</button></div>` : ''}
   <script src="${asset('dropdown.js')}"></script>
   <script src="${asset('app.js')}"></script>
 </body>

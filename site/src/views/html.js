@@ -20,9 +20,18 @@ const raw = (s) => new Safe(String(s));
 
 const fmt = {
   num: (n) => Number(n || 0).toLocaleString('ru-RU'),
-  rub: (n) => `${Number(n || 0).toLocaleString('ru-RU')} ₽`,
-  date: (t) => (t ? new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'),
-  datetime: (t) => (t ? new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'),
+  // неразрывные пробелы: «0 ₽» и «16 нояб. 2026 г.» не рвутся на две строки
+  rub: (n) => `${Number(n || 0).toLocaleString('ru-RU')} ₽`,
+  date: (t) => (t ? new Date(t).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }).replace(/ /g, ' ') : '—'),
+  datetime: (t) => (t ? new Date(t).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).replace(/ /g, ' ') : '—'),
+  /** короткий период «16 нояб. — 23 нояб. 2026» */
+  period: (a, b) => {
+    if (!a || !b) return '—';
+    const da = new Date(a), db = new Date(b);
+    const same = da.getFullYear() === db.getFullYear();
+    const f = (d, y) => d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', ...(y ? { year: 'numeric' } : {}) }).replace(' г.', '').replace(/ /g, ' ');
+    return `${f(da, !same)} — ${f(db, true)}`;
+  },
   ago: (t) => {
     if (!t) return 'никогда';
     const s = Math.round((Date.now() - t) / 1000);
