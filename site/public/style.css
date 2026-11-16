@@ -434,3 +434,6 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
   .admin-nav::-webkit-scrollbar { display: none; }
   .admin-nav a { flex: none; white-space: nowrap; }
 }
+
+/* единый отступ между блоками админки (вертикальные отступы схлопываются, двойных не будет) */
+.admin-main > * + * { margin-top: 18px; }
