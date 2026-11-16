@@ -229,7 +229,7 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
-function launcher(req, { downloadUrl }) {
+function launcher(req, { downloadUrl, portableUrl, version, size }) {
   return layout(req, {
     title: 'NLauncher',
     body: html`
@@ -237,7 +237,11 @@ function launcher(req, { downloadUrl }) {
       <span class="eyebrow">NeoDev</span>
       <h1>NLauncher</h1>
       <p class="muted">Минималистичный лаунчер Minecraft: лицензия и офлайн, любые версии, Fabric / Quilt / Forge, моды из Modrinth и сервера из этого мониторинга прямо на главном экране.</p>
-      <a class="btn primary lg" href="${downloadUrl}">${icon('download')}Скачать для Windows</a>
+      <div class="row">
+        <a class="btn primary lg" href="${downloadUrl}">${icon('download')}Скачать для Windows</a>
+        ${portableUrl ? html`<a class="btn ghost lg" href="${portableUrl}">Портативная версия</a>` : ''}
+      </div>
+      ${version ? html`<p class="muted small" style="margin-top:12px">Версия ${version}${size ? ` · ${(size / 1048576).toFixed(0)} МБ` : ''} · Windows 10/11</p>` : ''}
     </section>
     <div class="plans">
       <div class="card pad"><h3>Лицензия и офлайн</h3><p class="muted">Вход через Microsoft или просто по нику.</p></div>

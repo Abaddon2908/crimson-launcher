@@ -1,4 +1,5 @@
 // NeoDev Мониторинг — сервер приложения
+const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const express = require('express');
@@ -14,10 +15,42 @@ const V = { pub: require('./views/public'), cab: require('./views/cabinet'), adm
 const PORT = Number(process.env.PORT) || 3000;
 const LAUNCHER_DOWNLOAD = process.env.LAUNCHER_DOWNLOAD_URL || 'https://github.com/Abaddon2908/crimson-launcher/releases/latest';
 
+// Загрузки лаунчера: файлы лежат в data/downloads (загружаются через админку или по SFTP)
+const DOWNLOADS = path.join(process.env.DATA_DIR || path.join(__dirname, '..', 'data'), 'downloads');
+fs.mkdirSync(DOWNLOADS, { recursive: true });
+const FILE_RE = /^[\w.\- ()]+\.(exe|zip|dmg|appimage|deb|msi)$/i;
+const cmpVer = (a, b) => {
+  const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+  return 0;
+};
+function launcherFiles() {
+  return fs.readdirSync(DOWNLOADS, { withFileTypes: true })
+    .filter((d) => d.isFile() && FILE_RE.test(d.name))
+    .map((d) => {
+      const st = fs.statSync(path.join(DOWNLOADS, d.name));
+      const m = /(setup|portable).*?(\d+\.\d+\.\d+)/i.exec(d.name) || /(\d+\.\d+\.\d+)/.exec(d.name);
+      const kind = /portable/i.test(d.name) ? 'portable' : 'setup';
+      return { name: d.name, size: st.size, mtime: st.mtimeMs, kind, version: m ? m[m.length - 1] : null, url: `/downloads/${encodeURIComponent(d.name)}` };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+}
+/** Последняя версия: по номеру версии в имени файла, иначе — самый свежий .exe */
+function latestLauncher() {
+  const files = launcherFiles().filter((f) => /\.exe$/i.test(f.name));
+  const setups = files.filter((f) => f.kind === 'setup');
+  const versioned = setups.filter((f) => f.version).sort((a, b) => cmpVer(b.version, a.version));
+  const setup = versioned[0] || setups[0] || files[0];
+  if (!setup) return null;
+  const portable = files.find((f) => f.kind === 'portable' && f.version && f.version === setup.version) || (!setup.version && files.find((f) => f.kind === 'portable'));
+  return { version: setup.version, setup: setup.url, portable: portable ? portable.url : null, size: setup.size, date: setup.mtime };
+}
+
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY : false);
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '7d' }));
+app.use('/downloads', express.static(DOWNLOADS, { maxAge: '1h', dotfiles: 'deny', setHeaders: (res) => res.set('Content-Disposition', 'attachment') }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 app.use(express.json({ limit: '64kb' }));
 app.use((req, res, next) => {
@@ -127,7 +160,15 @@ app.post('/server/:id/vote', limiter(60_000, 10), (req, res) => {
 });
 
 app.get('/ads', (req, res) => send(res, V.pub.ads(req, { products: productsWithAvailability(), stats: siteStats() })));
-app.get('/launcher', (req, res) => send(res, V.pub.launcher(req, { downloadUrl: LAUNCHER_DOWNLOAD })));
+app.get('/launcher', (req, res) => {
+  const l = latestLauncher();
+  send(res, V.pub.launcher(req, { downloadUrl: l ? l.setup : LAUNCHER_DOWNLOAD, portableUrl: l?.portable || null, version: l?.version || null, size: l?.size || 0 }));
+});
+// Постоянная ссылка на последнюю версию: https://nlauncher.ru/download
+app.get('/download', (req, res) => {
+  const l = latestLauncher();
+  res.redirect(302, req.query.portable && l?.portable ? l.portable : l ? l.setup : LAUNCHER_DOWNLOAD);
+});
 
 /* ======================= Вход / регистрация ======================= */
 const safeNext = (n) => (typeof n === 'string' && /^\/(?!\/)/.test(n) ? n : '/cabinet');
@@ -327,6 +368,12 @@ app.get(['/api/launcher/feed.json', '/api/launcher/feed'], (req, res) => {
     top: top.filter((s) => !s.promo).slice(0, 10).map((s) => ({ name: s.name, address: s.address, tag: s.tagList[0] || `#${s.rank}`, votes: s.votes })),
     // «Сервер в игре»: лаунчер добавит их в начало списка «Сетевая игра» (иконка — PNG base64 из пинга)
     ingame: ingameServers().map((s) => ({ name: s.name, address: s.address, icon: s.favicon.startsWith('data:image/png;base64,') ? s.favicon.slice(22) : '' })),
+    // для уведомления «Доступна новая версия» в лаунчере
+    launcher: (() => {
+      const l = latestLauncher();
+      const base = settings.get('site_url').replace(/\/$/, '');
+      return l && l.version ? { version: l.version, url: `${base}/download`, setup: base + l.setup } : null;
+    })(),
     site: settings.get('site_url'),
   });
 });
@@ -592,6 +639,42 @@ adm.post('/users/:id/password', (req, res) => {
   const pw = String(req.body.password || '');
   if (pw.length >= 8) { db.prepare('UPDATE users SET pass = ? WHERE id = ?').run(auth.hashPassword(pw), id); audit(req, 'Сменил пароль пользователю', userEmail(id)); }
   res.redirect(`/admin/users?f=${pw.length >= 8 ? 'saved' : 'shortpw'}`);
+});
+
+/* ---- загрузки лаунчера ---- */
+adm.get('/launcher', (req, res) => {
+  const site = settings.get('site_url').replace(/\/$/, '');
+  send(res, V.adm.launcherPage(req, { files: launcherFiles(), latest: latestLauncher(), site, flash: flashOf(req) }));
+});
+// Файл приходит «как есть» (application/octet-stream), без multipart — так проще и не нужен лишний модуль
+adm.post('/launcher/upload', (req, res) => {
+  const name = path.basename(str(req.query.name, 120));
+  if (!FILE_RE.test(name)) return res.status(400).json({ ok: false, error: 'Допустимы .exe, .zip, .msi, .dmg, .AppImage, .deb; имя — латиница, цифры, точки, дефисы' });
+  const max = 500 * 1024 * 1024;
+  if (Number(req.headers['content-length']) > max) return res.status(413).json({ ok: false, error: 'Файл больше 500 МБ' });
+  const tmp = path.join(DOWNLOADS, `.upload-${crypto.randomBytes(6).toString('hex')}`);
+  const out = fs.createWriteStream(tmp);
+  let size = 0, failed = false;
+  const fail = (code, error) => { if (failed) return; failed = true; out.destroy(); fs.rm(tmp, { force: true }, () => {}); if (!res.headersSent) res.status(code).json({ ok: false, error }); };
+  req.on('data', (c) => { size += c.length; if (size > max) { fail(413, 'Файл больше 500 МБ'); req.destroy(); } });
+  req.on('aborted', () => fail(400, 'Загрузка прервана'));
+  out.on('error', (e) => fail(500, `Не удалось сохранить файл: ${e.message}`));
+  out.on('finish', () => {
+    if (failed) return;
+    if (size === 0) return fail(400, 'Пустой файл');
+    fs.renameSync(tmp, path.join(DOWNLOADS, name));
+    audit(req, 'Загрузил файл лаунчера', `${name} (${(size / 1048576).toFixed(1)} МБ)`);
+    res.json({ ok: true, name, size });
+  });
+  req.pipe(out);
+});
+adm.post('/launcher/delete', (req, res) => {
+  const name = path.basename(str(req.body.name, 120));
+  if (FILE_RE.test(name)) {
+    fs.rmSync(path.join(DOWNLOADS, name), { force: true });
+    audit(req, 'Удалил файл лаунчера', name);
+  }
+  res.redirect('/admin/launcher?f=ok');
 });
 
 /* ---- журнал ---- */

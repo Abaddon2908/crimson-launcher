@@ -33,6 +33,49 @@
     }
   });
 
+  // админка → лаунчер: загрузка файлов с прогрессом
+  const drop = document.getElementById('drop');
+  if (drop) {
+    const input = document.getElementById('upFile');
+    const list = document.getElementById('upList');
+    const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
+    const uploadOne = (file) => new Promise((resolve) => {
+      const row = document.createElement('div');
+      row.className = 'up-row';
+      row.innerHTML = '<span class="up-name"></span><span class="up-pct">0%</span><div class="pbar"><span></span></div>';
+      row.querySelector('.up-name').textContent = file.name;
+      list.append(row);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `/admin/launcher/upload?name=${encodeURIComponent(file.name)}`);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.setRequestHeader('X-CSRF-Token', csrf);
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        const p = Math.round((e.loaded / e.total) * 100);
+        row.querySelector('.up-pct').textContent = `${p}%`;
+        row.querySelector('.pbar span').style.width = `${p}%`;
+      };
+      xhr.onload = () => {
+        let r = {};
+        try { r = JSON.parse(xhr.responseText); } catch { r = { error: xhr.status === 413 ? 'Файл слишком большой для веб-сервера (проверьте client_max_body_size)' : `Ошибка ${xhr.status}` }; }
+        row.querySelector('.up-pct').textContent = r.ok ? 'готово' : r.error || 'ошибка';
+        row.classList.add(r.ok ? 'ok' : 'err');
+        resolve(r.ok);
+      };
+      xhr.onerror = () => { row.querySelector('.up-pct').textContent = 'ошибка сети'; row.classList.add('err'); resolve(false); };
+      xhr.send(file);
+    });
+    const run = async (files) => {
+      let ok = true;
+      for (const f of files) ok = (await uploadOne(f)) && ok;
+      if (ok) setTimeout(() => location.reload(), 600);
+    };
+    input.addEventListener('change', () => input.files.length && run([...input.files]));
+    ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+    ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+    drop.addEventListener('drop', (e) => e.dataTransfer.files.length && run([...e.dataTransfer.files]));
+  }
+
   // админка → выдать услугу: поля баннера и срок по умолчанию для выбранной услуги
   const kinds = document.querySelectorAll('input[name="kind"]');
   if (kinds.length) {

@@ -97,6 +97,20 @@ Caddy сам выпустит HTTPS-сертификат для домена и�
 git pull && docker compose up -d --build
 ```
 
+## Выкладка новой версии лаунчера
+
+Кнопка «Скачать» на сайте и ссылка https://nlauncher.ru/download всегда ведут на самую новую версию из папки загрузок. Лаунчеры с более старой версией показывают игрокам кнопку «Доступно обновление».
+
+**Через админку (проще всего):** Админка → **Лаунчер** → перетащите `NLauncher-Setup-X.Y.Z.exe` из GitHub Releases. Файл не переименовывайте: версия берётся из имени.
+
+**По SSH:** положите файл в папку загрузок:
+
+```bash
+cd /opt/crimson-launcher/site/data/downloads && wget https://github.com/Abaddon2908/crimson-launcher/releases/latest/download/NLauncher-Setup-0.2.6.exe && chown 1000:1000 *.exe
+```
+
+Папку `public_html` в Hestia для этого использовать нельзя: домен целиком обслуживает сайт мониторинга, поэтому файлы оттуда не видны.
+
 ## Подключение оплаты
 
 ### ЮMoney

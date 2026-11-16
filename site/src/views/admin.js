@@ -11,6 +11,7 @@ const SECTIONS = [
   ['/admin/orders', 'Заказы', 'card'],
   ['/admin/products', 'Тарифы', 'tag'],
   ['/admin/news', 'Новости', 'news'],
+  ['/admin/launcher', 'Лаунчер', 'download'],
   ['/admin/users', 'Пользователи', 'users'],
   ['/admin/log', 'Журнал', 'edit'],
   ['/admin/settings', 'Настройки', 'settings'],
@@ -255,13 +256,50 @@ function users(req, { list, q, flash }) {
     <div class="card table-wrap"><table class="table">
       <thead><tr><th>#</th><th>Имя</th><th>Email</th><th>Серверов</th><th>Потратил</th><th>Регистрация</th><th></th></tr></thead>
       <tbody>${list.map((u) => html`<tr>
-        <td class="muted">${u.id}</td><td>${u.name} ${u.role === 'admin' ? html`<span class="badge red">админ</span>` : ''}${u.banned ? html`<span class="badge bad">бан</span>` : ''}</td>
+        <td class="muted">${u.id}</td><td class="nowrap"><div class="badges">${u.name}${u.role === 'admin' ? html`<span class="badge red">админ</span>` : ''}${u.banned ? html`<span class="badge bad">бан</span>` : ''}${u.id === req.user.id ? html`<span class="badge">это вы</span>` : ''}</div></td>
         <td class="small">${u.email}</td><td>${u.servers ? html`<a class="link" href="/admin/servers?q=${encodeURIComponent(u.email)}">${u.servers}</a>` : 0}</td><td class="nowrap">${fmt.rub(u.spent)}</td><td class="small muted nowrap">${fmt.date(u.created)}</td>
         <td class="right nowrap">${btnPrompt(req, `/admin/users/${u.id}/password`, 'Новый пароль', 'password', `Новый пароль для ${u.email} (минимум 8 символов):`)}${u.id !== req.user.id ? html`
           ${btnPost(req, `/admin/users/${u.id}/role`, u.role === 'admin' ? 'Снять админа' : 'Сделать админом', 'ghost', '', 'Изменить роль?')}
-          ${btnPost(req, `/admin/users/${u.id}/ban`, u.banned ? 'Разбанить' : 'Забанить', 'ghost danger', '', u.banned ? 'Разбанить?' : 'Забанить пользователя? Он не сможет войти.')}` : html`<span class="muted small">это вы</span>`}</td>
+          ${btnPost(req, `/admin/users/${u.id}/ban`, u.banned ? 'Разбанить' : 'Забанить', 'ghost danger', '', u.banned ? 'Разбанить?' : 'Забанить пользователя? Он не сможет войти.')}` : ''}</td>
       </tr>`)}</tbody></table>
       ${list.length ? '' : html`<div class="empty"><b>Никого не найдено</b></div>`}
+    </div>`, { flash });
+}
+
+function launcherPage(req, { files, latest, site, flash }) {
+  const mb = (n) => `${(n / 1048576).toFixed(1)} МБ`;
+  return shell(req, '/admin/launcher', 'Лаунчер', html`
+    <div class="two">
+      <div class="card pad">
+        <h3>Загрузить новую версию</h3>
+        <p class="muted small">Скачайте установщик из GitHub Releases и загрузите сюда, не переименовывая: версия берётся из имени файла (например, NLauncher-Setup-0.2.6.exe). Портативную версию можно загрузить так же.</p>
+        <label class="drop" id="drop">
+          <input type="file" id="upFile" multiple accept=".exe,.zip,.msi,.dmg,.AppImage,.deb" hidden />
+          ${icon('download')}<b>Выберите файлы</b><span class="muted small">или перетащите сюда · до 500 МБ</span>
+        </label>
+        <div class="up-list" id="upList"></div>
+      </div>
+      <div class="card pad">
+        <h3>Что видят игроки</h3>
+        ${latest ? html`
+          <dl class="kv">
+            <dt>Версия на сайте</dt><dd><b>${latest.version || 'не указана в имени файла'}</b></dd>
+            <dt>Кнопка «Скачать»</dt><dd><a class="link" href="/download">${site}/download</a></dd>
+            <dt>Установщик</dt><dd class="small">${latest.setup}</dd>
+            ${latest.portable ? html`<dt>Портативная</dt><dd class="small">${latest.portable}</dd>` : ''}
+          </dl>
+          <p class="muted small" style="margin-top:12px">Лаунчеры с меньшей версией покажут игрокам «Доступно обновление» со ссылкой на эту версию.</p>`
+        : html`<p class="muted">Файлов ещё нет — кнопка «Скачать» ведёт на GitHub Releases.</p>`}
+      </div>
+    </div>
+    <div class="card table-wrap"><table class="table">
+      <thead><tr><th>Файл</th><th>Версия</th><th>Размер</th><th>Загружен</th><th></th></tr></thead>
+      <tbody>${files.map((f) => html`<tr>
+        <td><a class="link" href="${f.url}">${f.name}</a></td><td>${f.version || '—'} ${f.kind === 'portable' ? html`<span class="badge">портативная</span>` : ''}</td>
+        <td class="nowrap">${mb(f.size)}</td><td class="small muted nowrap">${fmt.datetime(f.mtime)}</td>
+        <td class="right">${btnPost(req, '/admin/launcher/delete', 'Удалить', 'ghost danger', html`<input type="hidden" name="name" value="${f.name}" />`, `Удалить ${f.name}?`)}</td>
+      </tr>`)}</tbody></table>
+      ${files.length ? '' : html`<div class="empty"><b>Пока пусто</b>Загрузите установщик лаунчера.</div>`}
     </div>`, { flash });
 }
 
@@ -303,4 +341,4 @@ function settingsPage(req, { s, flash, hooks }) {
     </form>`, { flash });
 }
 
-module.exports = { dashboard, servers, serverDetail, grant, orders, products, news, users, log, settingsPage };
+module.exports = { dashboard, servers, serverDetail, grant, orders, products, news, users, launcherPage, log, settingsPage };

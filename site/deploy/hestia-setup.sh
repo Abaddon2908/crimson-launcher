@@ -43,6 +43,9 @@ EOF
 fi
 
 # 3. Запуск контейнера
+# внутри контейнера сайт работает от пользователя node (uid 1000) — даём ему писать в data
+mkdir -p data/downloads
+chown -R 1000:1000 data
 say "Собираю и запускаю сайт (Docker)"
 docker compose -f docker-compose.hestia.yml up -d --build
 for _ in $(seq 1 30); do

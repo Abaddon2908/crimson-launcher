@@ -1,5 +1,19 @@
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 const { html, raw } = require('./html');
 const { settings } = require('../db');
+
+// Версия файла в ссылке (?v=хеш): после обновления сайта браузер сразу берёт новые стили и скрипты,
+// а не старые из кэша.
+const PUBLIC = path.join(__dirname, '..', '..', 'public');
+const versions = {};
+const asset = (name) => {
+  if (!versions[name]) {
+    try { versions[name] = crypto.createHash('sha1').update(fs.readFileSync(path.join(PUBLIC, name))).digest('hex').slice(0, 10); } catch { versions[name] = String(Date.now()); }
+  }
+  return `/${name}?v=${versions[name]}`;
+};
 
 const ICONS = {
   logo: '',
@@ -32,7 +46,7 @@ const icon = (n, cls = '') => raw(`<svg class="ic ${cls}" viewBox="0 0 24 24" fi
 function layout(req, { title, body, wide = false, flash = '', description = '' }) {
   const site = settings.get('site_name');
   const u = req.user;
-  const path = req.path;
+  const path = (req.baseUrl || "") + req.path; // внутри роутеров (/admin, /cabinet) req.path относительный
   const nav = (href, label) => html`<a href="${href}" class="${path === href || (href !== '/' && path.startsWith(href)) ? 'active' : ''}">${label}</a>`;
   return html`<!doctype html>
 <html lang="ru">
@@ -44,7 +58,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '' }
   <link rel="icon" href="/assets/icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="${asset('style.css')}" />
 </head>
 <body>
   <div class="bg" aria-hidden="true"><div class="bg-img"></div></div>
@@ -76,8 +90,8 @@ function layout(req, { title, body, wide = false, flash = '', description = '' }
     <span>© ${new Date().getFullYear()} NeoDev · ${site}</span>
     <span class="muted">Не является официальным продуктом Minecraft. Не одобрено и не связано с Mojang или Microsoft.</span>
   </footer>
-  <script src="/dropdown.js"></script>
-  <script src="/app.js"></script>
+  <script src="${asset('dropdown.js')}"></script>
+  <script src="${asset('app.js')}"></script>
 </body>
 </html>`;
 }

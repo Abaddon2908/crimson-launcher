@@ -314,6 +314,11 @@ api.game.onEvent((e) => {
 });
 
 /* ---------------- лента сайта / мониторинг ---------------- */
+function newerVersion(a, b) {
+  const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
 async function loadFeed() {
   state.feed = await safe(() => api.feed());
   const f = state.feed; if (!f) return;
@@ -327,6 +332,14 @@ async function loadFeed() {
     <div class="news-item" ${n.url ? `data-url="${esc(n.url)}"` : ''}><small>${esc(n.date || '')}</small><b>${esc(n.title)}</b>${n.text ? `<p>${esc(n.text)}</p>` : ''}</div>`).join('') || '<p class="muted">Пока пусто</p>';
   $$('#newsList [data-url]').forEach((el) => el.onclick = () => api.openUrl(el.dataset.url));
   renderHomeServers();
+  // новая версия лаунчера на сайте → кнопка «Доступно обновление»
+  const up = f.launcher;
+  if (up && up.version && up.url && newerVersion(up.version, state.info.version)) {
+    const pill = $('#updatePill');
+    $('span', pill).textContent = `Доступна версия ${up.version}`;
+    pill.hidden = false;
+    pill.onclick = () => api.openUrl(up.url);
+  }
 }
 
 function allServers() {
