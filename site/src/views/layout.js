@@ -72,8 +72,8 @@ function layout(req, { title, body, wide = false, flash = '', description = '' }
       </nav>
       <div class="top-right">
         ${u ? html`
-          ${u.role === 'admin' ? html`<a class="btn ghost sm" href="/admin">${icon('settings')}Админка</a>` : ''}
-          <a class="btn ghost sm" href="/cabinet">${icon('server')}Кабинет</a>
+          ${u.role === 'admin' ? html`<a class="btn ghost sm" href="/admin" title="Админка">${icon('settings')}<span class="lbl">Админка</span></a>` : ''}
+          <a class="btn ghost sm" href="/cabinet" title="Кабинет">${icon('server')}<span class="lbl">Кабинет</span></a>
           <form method="post" action="/logout" class="inline"><input type="hidden" name="_csrf" value="${req.csrf}" /><button class="btn ghost sm icon" title="Выйти">${icon('logout')}</button></form>
         ` : html`
           <a class="btn ghost sm" href="/login">Войти</a>

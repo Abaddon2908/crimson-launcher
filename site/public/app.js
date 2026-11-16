@@ -108,3 +108,10 @@
     upd();
   }
 })();
+
+// телефон: активный пункт меню админки — на виду
+(function () {
+  const a = document.querySelector('.admin-nav a.active');
+  const nav = a && a.parentElement;
+  if (nav && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = a.offsetLeft - nav.clientWidth / 2 + a.offsetWidth / 2;
+})();
