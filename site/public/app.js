@@ -129,3 +129,31 @@
     try { localStorage.setItem('cookieOk', '1'); } catch { /* ничего */ }
   });
 })();
+
+// страница «Статистика»: живое обновление с плавной анимацией чисел
+(function () {
+  const box = document.getElementById('liveStats');
+  if (!box) return;
+  const fmt = (n) => Number(n).toLocaleString('ru-RU');
+  const get = (o, path) => path.split('.').reduce((a, k) => (a ? a[k] : undefined), o);
+  const animate = (el, to) => {
+    const from = Number(el.dataset.value) || 0;
+    if (from === to) return;
+    const t0 = performance.now(), dur = 900;
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      el.textContent = fmt(Math.round(from + (to - from) * e));
+      if (k < 1) requestAnimationFrame(step); else el.dataset.value = String(to);
+    };
+    requestAnimationFrame(step);
+  };
+  const tick = async () => {
+    try {
+      const r = await fetch('/api/stats', { cache: 'no-store' });
+      const s = await r.json();
+      box.querySelectorAll('[data-stat]').forEach((el) => { const v = get(s, el.dataset.stat); if (typeof v === 'number') animate(el, v); });
+    } catch { /* нет сети — попробуем позже */ }
+  };
+  setInterval(tick, 30000);
+})();

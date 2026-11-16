@@ -28,6 +28,7 @@ if (!window.api) {
       toggle: async () => [], remove: async () => [], folder: async () => {}, onProgress() {},
     },
     servers: { ping: async (a) => { await wait(400 + Math.random() * 600); return a.includes('example') && !a.startsWith('play') ? { online: false } : { online: true, players: Math.floor(Math.random() * 40000), max: 100000, ping: 30 + Math.floor(Math.random() * 90), version: 'Requires MC 1.8 / 1.21', motd: 'Лучший сервер — заходи!' }; } },
+    online: async () => ({ launcherOnline: 1284, serversOnline: 18340, demo: false }),
     feed: async () => ({ banner: { title: 'Здесь будет ваш мониторинг', text: 'Топ серверов, продвижение и рекламные места — прямо в лаунчере.', cta: 'Разместить рекламу', url: '#' }, news: [{ title: 'Лаунчер вышел в бету', date: '2026-11-13', text: 'Лицензия и офлайн, моды через Modrinth, Fabric / Quilt / Forge.' }, { title: 'Мониторинг серверов скоро', date: '2026-11-10', text: 'Голосуйте за любимые сервера и получайте награды.' }], promoted: [{ name: 'Ваш сервер', address: 'play.example.com', tag: 'Промо', ad: true, desc: 'Здесь может быть ваш сервер' }] }),
     game: {
       launch: async () => { const e = listeners.ev; const steps = [['auth', 'Авторизация'], ['java', 'Java 21', 30, 100], ['download', 'assets', 420, 1000], ['download', 'natives', 9, 10]]; for (const [stage, task, loaded, total] of steps) { e && e({ stage, task, loaded, total }); await wait(600); } e && e({ stage: 'started' }); return true; },

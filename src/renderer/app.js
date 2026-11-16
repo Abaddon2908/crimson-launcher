@@ -313,6 +313,19 @@ api.game.onEvent((e) => {
   setProgress(label, e.loaded || 0, e.total || 0);
 });
 
+/* ---------------- онлайн (nlauncher.ru/stats) ---------------- */
+async function refreshOnline() {
+  const o = await api.online().catch(() => null);
+  const pill = $('#onlinePill');
+  if (!o || (o.launcherOnline == null && !o.serversOnline)) { pill.hidden = true; return; }
+  const parts = [];
+  if (o.launcherOnline != null) parts.push(`${o.launcherOnline.toLocaleString('ru-RU')} в NLauncher`);
+  if (o.serversOnline) parts.push(`${o.serversOnline.toLocaleString('ru-RU')} на серверах`);
+  $('span:last-child', pill).textContent = parts.join(' · ') + (o.demo ? ' · демо' : '');
+  pill.hidden = false;
+  pill.title = o.demo ? 'Демо-цифры: лаунчер запущен с --demo-stats' : 'Онлайн по данным nlauncher.ru';
+}
+
 /* ---------------- лента сайта / мониторинг ---------------- */
 function newerVersion(a, b) {
   const x = String(a).split('.').map(Number), y = String(b).split('.').map(Number);
@@ -531,6 +544,7 @@ function bindSettings() {
   bindTxt('#sW', 'width', true); bindTxt('#sH', 'height', true);
   bindChk('#sFull', 'fullscreen'); bindChk('#sHide', 'closeOnLaunch'); bindChk('#sConsole', 'showConsole');
   bindChk('#sAnim', 'animations', (v) => document.body.classList.toggle('no-anim', !v));
+  bindChk('#sStats', 'shareStats');
   $('#rootPath').textContent = state.info.root;
   $('#openRoot').onclick = () => api.openPath(state.info.root);
   $('#about').textContent = `${state.info.config.brand} Launcher v${state.info.version} · ${state.info.platform}`;
@@ -563,6 +577,8 @@ function save(p) {
   bindSettings();
   go('home');
   loadFeed();
+  refreshOnline();
+  setInterval(refreshOnline, 60000);
   const st = await api.game.status().catch(() => null);
   if (st) setPlayState('running');
   if (!activeAccount()) setTimeout(() => accountModal(), 600);

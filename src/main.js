@@ -43,6 +43,7 @@ app.whenReady().then(() => {
     feed: require('./core/feed'),
     launch: require('./core/launch'),
     java: require('./core/java'),
+    telemetry: require('./core/telemetry'),
   };
 
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
@@ -109,7 +110,11 @@ app.whenReady().then(() => {
 
   // игра
   handle('game:launch', async (id, server) => {
-    await core.launch.start(id, (e) => send('game:event', e), server);
+    await core.launch.start(id, (e) => {
+      send('game:event', e);
+      if (e.stage === 'closed') core.telemetry.ping(); // сразу сообщаем «больше не в игре»
+    }, server);
+    core.telemetry.ping('launch');
     if (core.store.read('settings').closeOnLaunch) win.hide();
     return true;
   });
@@ -118,6 +123,8 @@ app.whenReady().then(() => {
   ipcMain.on('game:closed-show', () => win.show());
 
   core.instances.ensureDefault();
+  core.telemetry.start(core.config, { isInGame: () => Boolean(core.launch.status()), version: app.getVersion() });
+  handle('stats:online', () => core.telemetry.online());
   createWindow();
 });
 

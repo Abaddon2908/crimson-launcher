@@ -463,3 +463,22 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
 
 /* доступность: мелкий второстепенный текст контрастнее (Lighthouse) */
 :root { --dim: #877b7d; }
+
+/* страница «Статистика» */
+.stats.two-col { grid-template-columns: repeat(2, 1fr); }
+.stats-hero .stats { margin-top: 26px; }
+.stat.live b { font-size: 30px; font-variant-numeric: tabular-nums; }
+.stat.live i { font-style: normal; font-size: 12px; }
+.stats-hero .stat { background: rgba(18, 14, 16, .7); }
+.h3 { font: 600 16px var(--display); margin: 0; }
+.badge.demo { background: rgba(214, 167, 100, .2); color: var(--warn); margin-left: 8px; letter-spacing: .02em; text-transform: none; }
+.pulse { animation: pulse 2s ease-in-out infinite; vertical-align: 1px; margin-right: 4px; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(111, 191, 142, 0); } 0%, 100% { box-shadow: 0 0 0 0 rgba(111, 191, 142, .45); } }
+.bars.days { height: 160px; }
+.bars-axis { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); margin-top: 6px; }
+.faq ul { padding-left: 20px; color: #cfc4c6; display: flex; flex-direction: column; gap: 8px; }
+.check.big { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; }
+.check.big input { margin-top: 2px; }
+.check.big span { display: flex; flex-direction: column; gap: 3px; }
+.check.big b { color: var(--text); font-size: 14px; }
+@media (max-width: 680px) { .stat.live b { font-size: 22px; } .stats.two-col { grid-template-columns: 1fr 1fr; } }

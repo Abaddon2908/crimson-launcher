@@ -349,6 +349,13 @@ function settingsPage(req, { s, flash, hooks }) {
         <pre class="code">${hooks.feed}</pre>
         <p class="muted small">Оттуда лаунчер берёт баннер, новости, PROMO, топ и сервера для списка «Сетевая игра».</p>
       </div>
+      <div class="card pad full"><h3>Статистика и онлайн</h3>
+        <label class="check big"><input type="checkbox" name="show_launcher_online" ${s.show_launcher_online === '1' ? 'checked' : ''} />
+          <span><b>Показывать «игроков в NLauncher»</b><small class="muted">Реальный онлайн лаунчера на сайте и в самом лаунчере. Пока игроков мало, можно выключить — тогда виден только общий онлайн серверов мониторинга.</small></span></label>
+        <label class="check big"><input type="checkbox" name="demo_stats" ${s.demo_stats === '1' ? 'checked' : ''} />
+          <span><b>Демо-статистика для тестов</b><small class="muted">Подставляет на странице «Статистика» случайные 2000–3000 онлайн и вымышленные дневные цифры — <b>только для администраторов</b> и с пометкой «ДЕМО». Посетители и лаунчер всегда видят настоящие данные.</small></span></label>
+        <p class="muted small"><a class="link" href="/stats" target="_blank">Открыть страницу «Статистика»</a></p>
+      </div>
       <div class="card pad full"><h3>SEO и метрики</h3>
         <div class="settings-grid inner">
           <div>

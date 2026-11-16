@@ -418,3 +418,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .update-pill { color: #f1d9a8; background: rgba(214, 167, 100, .16); }
 .update-pill:hover { color: #fff; background: rgba(214, 167, 100, .28); }
 .update-pill i[data-icon] { width: 14px; height: 14px; }
+.online-pill { color: var(--text); cursor: default; }
+.online-pill .dot { margin-right: 2px; }
+.pulse { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(111, 191, 142, .45); } 50% { box-shadow: 0 0 0 5px rgba(111, 191, 142, 0); } }

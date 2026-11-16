@@ -131,6 +131,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
       <nav class="nav">
         ${nav('/', 'Топ серверов')}
         ${nav('/ads', 'Реклама')}
+        ${nav('/stats', 'Статистика')}
         ${nav('/launcher', 'NLauncher')}
       </nav>
       <div class="top-right">

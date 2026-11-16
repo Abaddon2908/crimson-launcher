@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   servers: { ping: (a) => call('servers:ping', a) },
   feed: () => call('feed:load'),
+  online: () => call('stats:online'),
   game: {
     launch: (id, server) => call('game:launch', id, server),
     stop: () => call('game:stop'),

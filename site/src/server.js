@@ -13,6 +13,7 @@ const heleket = require('./payments/heleket');
 const { safeUrl } = require('./views/html');
 const { serverPath, slugify } = require('./seo');
 const V = { pub: require('./views/public'), cab: require('./views/cabinet'), adm: require('./views/admin') };
+const stats = require('./stats');
 
 const PORT = Number(process.env.PORT) || 3000;
 const LAUNCHER_DOWNLOAD = process.env.LAUNCHER_DOWNLOAD_URL || 'https://github.com/Abaddon2908/crimson-launcher/releases/latest';
@@ -197,6 +198,7 @@ app.get('/sitemap.xml', (req, res) => {
     { loc: '/', changefreq: 'hourly', priority: '1.0', lastmod: day() },
     { loc: '/launcher', changefreq: 'weekly', priority: '0.8' },
     { loc: '/ads', changefreq: 'weekly', priority: '0.6' },
+    { loc: '/stats', changefreq: 'hourly', priority: '0.7' },
   ];
   const tagCounts = {};
   for (const s of topServers({ limit: 5000 })) {
@@ -414,6 +416,23 @@ app.post('/pay/heleket/webhook', async (req, res) => {
 });
 
 /* ======================= API для NLauncher ======================= */
+/* ---- статистика NLauncher ---- */
+// сигнал от лаунчера: { id: 32 hex, inGame, version, event: 'launch' }
+// лимит на IP: за одним адресом (мобильный оператор, клуб) бывает много игроков — 120/мин ≈ 240 лаунчеров
+app.post('/api/launcher/ping', limiter(60_000, 120), (req, res) => {
+  const ok = stats.ping({ id: req.body?.id, inGame: Boolean(req.body?.inGame), version: str(req.body?.version, 20), event: req.body?.event === 'launch' ? 'launch' : '' });
+  res.status(ok ? 204 : 400).end();
+});
+// текущие цифры (лаунчер и страница «Статистика»); демо — только админу и только с пометкой
+app.get('/api/stats', (req, res) => {
+  const demo = stats.demoAllowed(req) && req.query.demo !== '0';
+  res.set('Cache-Control', demo ? 'private, no-store' : 'public, max-age=30').json(demo ? stats.demoSummary() : stats.summary());
+});
+app.get('/stats', (req, res) => {
+  const demo = stats.demoAllowed(req);
+  send(res, V.pub.statsPage(req, { s: demo ? stats.demoSummary() : stats.summary(), h: demo ? stats.demoHistory() : stats.history() }));
+});
+
 app.get(['/api/launcher/feed.json', '/api/launcher/feed'], (req, res) => {
   const b = bannerData();
   const top = topServers({ limit: 20 });
@@ -431,6 +450,8 @@ app.get(['/api/launcher/feed.json', '/api/launcher/feed'], (req, res) => {
       const base = settings.get('site_url').replace(/\/$/, '');
       return l && l.version ? { version: l.version, url: `${base}/download`, setup: base + l.setup } : null;
     })(),
+    // честный онлайн для строки на главной лаунчера
+    stats: (() => { const s = stats.summary(); return { launcherOnline: s.showLauncher ? s.launcher.online : null, serversOnline: s.servers.online }; })(),
     site: settings.get('site_url'),
   });
 });
@@ -747,8 +768,11 @@ adm.get('/settings', (req, res) => {
   send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));
 });
 adm.post('/settings', (req, res) => {
-  const changed = SETTING_KEYS.filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));
+  // флажки: если галочка снята, браузер поле не отправляет — поэтому выставляем явно
+  for (const k of ['show_launcher_online', 'demo_stats']) req.body[k] = req.body[k] ? '1' : '0';
+  const changed = [...SETTING_KEYS, 'show_launcher_online', 'demo_stats'].filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));
   for (const k of changed) settings.set(k, str(req.body[k], 300));
+  if (changed.includes('demo_stats')) audit(req, req.body.demo_stats === '1' ? 'Включил демо-статистику (видна только админам)' : 'Выключил демо-статистику', '');
   if (changed.length) audit(req, 'Изменил настройки', changed.map((k) => (/secret|key/.test(k) ? `${k} (скрыто)` : k)).join(', '));
   res.redirect('/admin/settings?f=saved');
 });
@@ -764,6 +788,7 @@ app.use((err, req, res, _next) => {
 auth.bootstrapAdmin();
 if (process.env.NODE_ENV !== 'test') {
   pinger.start();
+  stats.start();
   app.listen(PORT, () => console.log(`NeoDev Мониторинг: http://localhost:${PORT}`));
 }
 

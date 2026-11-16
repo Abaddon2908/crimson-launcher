@@ -300,8 +300,68 @@ function launcher(req, { downloadUrl, portableUrl, version, size }) {
   });
 }
 
+function statsPage(req, { s, h }) {
+  const L = s.launcher, S = s.servers;
+  const big = (key, value, label, hint = '') => html`<div class="stat card live"><b data-stat="${key}" data-value="${value}">${fmt.num(value)}</b><small>${label}</small>${hint ? html`<i class="muted">${hint}</i>` : ''}</div>`;
+  const toPts = (key) => h.day.map((x) => ({ t: x.ts, v: x[key] }));
+  const maxU = Math.max(1, ...h.days.map((d) => (s.showLauncher ? d.uniques : d.peakServers)));
+  const dayLabel = (k) => new Date(`${k}T12:00:00Z`).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  return layout(req, {
+    title: 'Статистика: онлайн Minecraft-серверов и NLauncher',
+    description: `Онлайн в реальном времени: ${fmt.num(S.online)} игроков на серверах мониторинга${s.showLauncher ? `, ${fmt.num(L.online)} в NLauncher` : ''}. Ежедневная статистика за 30 дней.`,
+    noindex: s.demo,
+    body: html`
+    <section class="page-hero stats-hero" id="liveStats" data-demo="${s.demo ? '1' : ''}">
+      <span class="eyebrow">Статистика ${s.demo ? html`<span class="badge demo">ДЕМО · видите только вы</span>` : ''}</span>
+      <h1>Онлайн прямо сейчас</h1>
+      <p class="muted"><span class="dot ok pulse"></span> Обновляется автоматически каждые 30 секунд</p>
+      <div class="stats ${s.showLauncher ? 'four' : 'two-col'}">
+        ${big('servers.online', S.online, 'игроков на серверах мониторинга', `${fmt.num(S.count)} серверов онлайн`)}
+        ${s.showLauncher ? big('launcher.online', L.online, 'запущено NLauncher', 'лаунчеров открыто сейчас') : ''}
+        ${s.showLauncher ? big('launcher.inGame', L.inGame, 'играют через NLauncher', 'в игре прямо сейчас') : ''}
+        ${big('servers.peakToday', S.peakToday, 'пик на серверах сегодня')}
+      </div>
+    </section>
+
+    <div class="card pad">
+      <div class="card-head"><h2 class="h3">Онлайн за 24 часа</h2><small class="muted">снимок каждые 5 минут</small></div>
+      ${s.showLauncher ? html`<p class="muted small">NLauncher</p>${chart(toPts('launcher'))}<p class="muted small" style="margin-top:14px">Сервера мониторинга</p>` : ''}
+      ${chart(toPts('servers'))}
+    </div>
+
+    ${s.showLauncher ? html`
+    <div class="stats four" style="margin-top:18px">
+      <div class="stat card"><b>${fmt.num(L.today.uniques)}</b><small>игроков сегодня</small></div>
+      <div class="stat card"><b>${fmt.num(L.today.launches)}</b><small>запусков игры сегодня</small></div>
+      <div class="stat card"><b>${fmt.num(L.week)}</b><small>игроков за 7 дней</small></div>
+      <div class="stat card"><b>${fmt.num(L.month)}</b><small>игроков за 30 дней</small></div>
+    </div>` : ''}
+
+    <div class="card pad" style="margin-top:18px">
+      <div class="card-head"><h2 class="h3">${s.showLauncher ? 'Игроков NLauncher по дням' : 'Пик онлайна серверов по дням'}</h2><small class="muted">последние 30 дней</small></div>
+      <div class="bars days">${h.days.map((d) => { const v = s.showLauncher ? d.uniques : d.peakServers; return html`<span title="${dayLabel(d.day)}: ${fmt.num(v)}" style="height:${Math.max(2, (v / maxU) * 100)}%"></span>`; })}</div>
+      <div class="bars-axis"><span>${dayLabel(h.days[0].day)}</span><span>сегодня</span></div>
+      <div class="table-wrap" style="margin-top:16px"><table class="table compact">
+        <thead><tr><th>День</th>${s.showLauncher ? html`<th>Игроков</th><th>Запусков</th><th>Пик в лаунчере</th>` : ''}<th>Пик на серверах</th></tr></thead>
+        <tbody>${h.days.slice(-7).reverse().map((d) => html`<tr><td class="nowrap">${dayLabel(d.day)}</td>${s.showLauncher ? html`<td>${fmt.num(d.uniques)}</td><td>${fmt.num(d.launches)}</td><td>${fmt.num(d.peak)}</td>` : ''}<td>${fmt.num(d.peakServers)}</td></tr>`)}</tbody>
+      </table></div>
+    </div>
+
+    <div class="card pad faq" style="margin-top:18px">
+      <h2 class="h3">Как мы считаем</h2>
+      <ul>
+        <li><b>Сервера мониторинга</b> — сумма игроков на всех серверах топа: сайт опрашивает их каждые 5 минут.</li>
+        ${s.showLauncher ? html`<li><b>NLauncher</b> — запущенный лаунчер раз в 2 минуты отправляет анонимный случайный идентификатор и признак «в игре». Никаких ников, IP-адресов и других личных данных мы не храним. Отправку можно отключить в настройках лаунчера.</li>` : ''}
+        ${s.demo
+          ? html`<li><b>Сейчас включён демо-режим:</b> цифры на этой странице вымышленные и видны только администраторам. Посетители видят настоящую статистику. Выключить: Админка → Настройки.</li>`
+          : html`<li>Все цифры настоящие и обновляются автоматически.</li>`}
+      </ul>
+    </div>`,
+  });
+}
+
 function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { home, server, ads, authForm, launcher, message, favicon, statusDot, chart };
+module.exports = { home, server, ads, authForm, launcher, statsPage, message, favicon, statusDot, chart };

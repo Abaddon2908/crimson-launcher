@@ -17,6 +17,7 @@ const DEFAULTS = {
     showConsole: false,
     accent: 'wine',
     animations: true,
+    shareStats: true,
     lastInstance: null,
     servers: [],
   },
