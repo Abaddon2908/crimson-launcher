@@ -87,24 +87,61 @@
       const k = document.querySelector('input[name="kind"]:checked');
       if (!k) return;
       if (fields) fields.hidden = k.value !== 'banner';
+      const pf = document.querySelector('.points-fields'); if (pf) pf.hidden = k.value !== 'points';
       if (days && !touched && !initial) days.value = k.dataset.days;
     };
     kinds.forEach((k) => k.addEventListener('change', () => upd(false)));
     upd(true);
   }
 
-  // страница покупки: поля баннера и итоговая сумма
-  const picks = document.querySelectorAll('input[name="product_id"]');
-  if (picks.length) {
-    const fields = document.querySelector('.banner-fields');
+  // страница покупки: поля по услуге, расчёт цены промо-баллов, купон
+  const form = document.getElementById('buyForm');
+  if (form) {
+    const rub = (n) => `${Math.round(n).toLocaleString('ru-RU')} ₽`;
+    const durations = JSON.parse(form.dataset.durations);
+    const packs = JSON.parse(form.dataset.packs);
+    const ppp = Number(form.dataset.pointPrice);
     const total = document.getElementById('total');
+    const lines = document.getElementById('priceLines');
+    let couponPct = 0, couponMsg = '';
+    const show = (sel, on) => { const el = form.querySelector(sel); if (el) el.hidden = !on; };
     const upd = () => {
-      const p = document.querySelector('input[name="product_id"]:checked');
+      const p = form.querySelector('input[name="product_id"]:checked');
       if (!p) return;
-      if (fields) fields.hidden = p.dataset.kind !== 'banner';
-      if (total) total.textContent = `${Number(p.dataset.price).toLocaleString('ru-RU')} ₽`;
+      const kind = p.dataset.kind;
+      show('.points-fields', kind === 'points'); show('.banner-fields', kind === 'banner'); show('.color-fields', kind === 'highlight');
+      let base = Number(p.dataset.price) || 0, pack = 0, packPct = 0;
+      if (kind === 'points') {
+        const n = Math.round((Number(form.points.value) || 0) / 5) * 5;
+        const d = durations.find((x) => x[0] === Number(form.days.value)) || durations[0];
+        base = n * ppp * d[1];
+        packPct = (packs.find((x) => n >= x[0]) || [0, 0])[1];
+        pack = Math.round((base * packPct) / 100);
+      }
+      const after = base - pack;
+      const coupon = couponPct ? Math.min(after - 1, Math.round((after * couponPct) / 100)) : 0;
+      lines.innerHTML = '';
+      const add = (l, v, cls = '') => { const d = document.createElement('div'); d.className = `pl ${cls}`; d.innerHTML = '<span></span><b></b>'; d.firstChild.textContent = l; d.lastChild.textContent = v; lines.append(d); };
+      if (pack) { add('Без скидки', rub(base)); add(`Пакетная скидка ${packPct}%`, `−${rub(pack)}`, 'ok'); }
+      if (coupon) add(`Купон −${couponPct}%`, `−${rub(coupon)}`, 'ok');
+      if (couponMsg) add(couponMsg, '', 'bad');
+      total.textContent = rub(Math.max(1, after - coupon));
     };
-    picks.forEach((p) => p.addEventListener('change', upd));
+    form.addEventListener('change', upd);
+    form.addEventListener('input', (e) => { if (e.target.name === 'points') upd(); });
+    form.querySelectorAll('[data-points-set]').forEach((b) => b.addEventListener('click', () => { form.points.value = b.dataset.pointsSet; upd(); }));
+    let ct;
+    form.coupon.addEventListener('input', () => {
+      clearTimeout(ct);
+      ct = setTimeout(async () => {
+        const code = form.coupon.value.trim();
+        couponPct = 0; couponMsg = '';
+        if (code) {
+          try { const r = await (await fetch(`/cabinet/coupon?code=${encodeURIComponent(code)}`)).json(); if (r.ok) couponPct = r.pct; else couponMsg = r.error; } catch { /* нет сети */ }
+        }
+        upd();
+      }, 400);
+    });
     upd();
   }
 })();
@@ -157,3 +194,60 @@
   };
   setInterval(tick, 30000);
 })();
+
+// учёт копирований IP (для статистики владельца) — без личных данных
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('[data-copy][data-server]');
+  if (c) fetch(`/api/server/${c.dataset.server}/copy`, { method: 'POST', keepalive: true }).catch(() => {});
+});
+
+// избранное: хранится в браузере, без регистрации
+(function () {
+  const KEY = 'favServers';
+  const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } };
+  const write = (v) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch { /* приватный режим */ } };
+  const paint = () => document.querySelectorAll('[data-fav]').forEach((b) => {
+    const on = read().includes(Number(b.dataset.fav));
+    b.classList.toggle('on', on);
+    const s = b.querySelector('span'); if (s) s.textContent = on ? 'В избранном' : 'В избранное';
+  });
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fav]');
+    if (!b) return;
+    e.preventDefault();
+    const id = Number(b.dataset.fav);
+    const list = read();
+    write(list.includes(id) ? list.filter((x) => x !== id) : [id, ...list].slice(0, 100));
+    paint();
+  });
+  paint();
+  // страница /favorites: подгружаем список
+  const box = document.getElementById('favList');
+  if (box) {
+    const ids = read();
+    if (!ids.length) { box.innerHTML = '<div class="empty"><b>Пока пусто</b>Нажмите «В избранное» на странице сервера — он появится здесь.</div>'; return; }
+    fetch(`/favorites/list?ids=${ids.join(',')}`).then((r) => r.text()).then((h) => { box.innerHTML = h; });
+  }
+})();
+
+// форма сервера: не больше 12 тегов
+(function () {
+  const boxes = document.querySelectorAll('.tag-picker input[name="tags"]');
+  if (!boxes.length) return;
+  const out = document.getElementById('tagCount');
+  const upd = () => {
+    const n = [...boxes].filter((b) => b.checked).length;
+    boxes.forEach((b) => { b.disabled = !b.checked && n >= 12; });
+    if (out) out.textContent = `Выбрано: ${n} из 12`;
+  };
+  boxes.forEach((b) => b.addEventListener('change', upd));
+  upd();
+})();
+
+// кабинет → виджеты: копирование кода
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-copy-code]');
+  if (!b) return;
+  const ta = b.parentElement.querySelector('textarea');
+  navigator.clipboard.writeText(ta.value).then(() => { const t = b.lastChild.textContent; b.lastChild.textContent = 'Скопировано'; setTimeout(() => { b.lastChild.textContent = t; }, 1500); }, () => { ta.select(); });
+});

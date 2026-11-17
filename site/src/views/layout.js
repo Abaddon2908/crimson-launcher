@@ -130,6 +130,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
       <a href="/" class="brand"><img class="logo" src="/assets/logo-mark.svg" alt="" /><span><b>${site}</b><small>by NeoDev</small></span></a>
       <nav class="nav">
         ${nav('/', 'Топ серверов')}
+        ${nav('/servera/', 'Подборки')}
         ${nav('/ads', 'Реклама')}
         ${nav('/stats', 'Статистика')}
         ${nav('/launcher', 'NLauncher')}

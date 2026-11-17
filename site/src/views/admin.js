@@ -11,6 +11,7 @@ const SECTIONS = [
   ['/admin/grant', 'Выдать услугу', 'bolt'],
   ['/admin/orders', 'Заказы', 'card'],
   ['/admin/products', 'Тарифы', 'tag'],
+  ['/admin/coupons', 'Купоны', 'card'],
   ['/admin/news', 'Новости', 'news'],
   ['/admin/launcher', 'Лаунчер', 'download'],
   ['/admin/users', 'Пользователи', 'users'],
@@ -104,7 +105,7 @@ function serverDetail(req, { s, owner, services, orders, votes, voteStats, flash
       <div class="col">
         <div class="card pad">
           <div class="row between"><div class="row">${favicon(s, 'fav')}<div><b>${s.name}</b><br/><small class="muted">${s.address}</small></div></div>
-            <div class="row"><a class="btn ghost sm" href="${serverPath(s)}" target="_blank">На сайте</a><a class="btn ghost sm" href="/cabinet/servers/${s.id}">${icon('edit')}Редактировать</a></div></div>
+            <div class="row"><a class="btn ghost sm" href="${serverPath(s)}" target="_blank">На сайте</a><a class="btn ghost sm" href="/cabinet/servers/${s.id}/stats">${icon('chart')}Статистика</a><a class="btn ghost sm" href="/cabinet/servers/${s.id}">${icon('edit')}Редактировать</a></div></div>
           <dl class="kv">
             <dt>Статус</dt><dd><span class="badge ${STATUS[s.status][1]}">${STATUS[s.status][0]}</span>${s.reject_reason ? html` <small class="muted">${s.reject_reason}</small>` : ''}</dd>
             <dt>Онлайн</dt><dd>${statusDot(s)} ${s.online ? `${s.players} / ${s.max_players}, ${s.ping_ms} мс` : 'офлайн'} · <small class="muted">${fmt.ago(s.last_ping)}</small></dd>
@@ -172,8 +173,11 @@ function grant(req, { servers, sel, kindDefaults, error }) {
         </label>
         <div class="field"><span>Услуга</span>
           <div class="plan-pick">${Object.entries(KINDS).map(([k, v]) => html`
-            <label class="pick"><input type="radio" name="kind" value="${k}" data-kind="${k}" data-days="${kindDefaults[k] || 7}" ${k === (sel.kind || 'promo') ? 'checked' : ''} /><span><b>${v.label}</b><small>${{ promo: 'Над топом на сайте и в NLauncher с меткой PROMO', banner: 'Баннер на главной лаунчера и сайта', highlight: 'Подсветка карточки в топе', ingame: 'Первым в списке «Сетевая игра» у игроков NLauncher' }[k]}</small></span></label>`)}
+            <label class="pick"><input type="radio" name="kind" value="${k}" data-kind="${k}" data-days="${kindDefaults[k] || 7}" ${k === (sel.kind || 'promo') ? 'checked' : ''} /><span><b>${v.label}</b><small>${{ promo: 'Над топом на сайте и в NLauncher с меткой PROMO', banner: 'Баннер на главной лаунчера и сайта', highlight: 'Подсветка карточки в топе', ingame: 'Первым в списке «Сетевая игра» у игроков NLauncher', points: 'Подъём в общем топе — по сумме активных баллов' }[k]}</small></span></label>`)}
           </div>
+        </div>
+        <div class="points-fields" hidden>
+          <label class="field"><span>Количество промо-баллов</span><input class="input" type="number" name="points" min="5" max="10000" step="5" value="100" /></label>
         </div>
         <div class="banner-fields" hidden>
           <label class="field"><span>Заголовок баннера</span><input class="input" name="banner_title" maxlength="60" /></label>
@@ -219,7 +223,7 @@ function orders(req, { list, status, q, flash }) {
 }
 
 function products(req, { list, flash }) {
-  const opts = (sel) => Object.entries(KINDS).map(([k, v]) => html`<option value="${k}" ${k === sel ? 'selected' : ''}>${v.label}</option>`);
+  const opts = (sel) => Object.entries(KINDS).filter(([k]) => k !== 'points').map(([k, v]) => html`<option value="${k}" ${k === sel ? 'selected' : ''}>${v.label}</option>`);
   return shell(req, '/admin/products', 'Тарифы', html`
     <p class="muted">Цены и сроки меняются сразу. «Мест» — сколько одновременно может крутиться (0 — без ограничений). Уже оплаченные заказы не пересчитываются.</p>
     <div class="cards">${list.map((p) => html`
@@ -315,6 +319,34 @@ function launcherPage(req, { files, latest, site, flash }) {
     </div>`, { flash });
 }
 
+function coupons(req, { list, flash }) {
+  return shell(req, '/admin/coupons', 'Купоны', html`
+    <p class="muted">Скидка в процентах на любую услугу. Учитывается при оплате; лимит использований и срок — по желанию.</p>
+    <form method="post" action="/admin/coupons" class="card pad product-form">${csrfField(req)}
+      <h3>Новый купон</h3>
+      <div class="row three">
+        <label class="field"><span>Код</span><input class="input mono" name="code" placeholder="авто" maxlength="30" style="text-transform:uppercase" /></label>
+        <label class="field"><span>Скидка, %</span><input class="input" type="number" name="percent" min="1" max="90" value="10" required /></label>
+        <label class="field"><span>Использований (0 — без лимита)</span><input class="input" type="number" name="max_uses" min="0" value="0" /></label>
+      </div>
+      <div class="row three">
+        <label class="field"><span>Действует дней (0 — бессрочно)</span><input class="input" type="number" name="days" min="0" value="30" /></label>
+        <label class="field" style="grid-column: span 2"><span>Заметка</span><input class="input" name="note" maxlength="100" placeholder="Для партнёров / акция на Новый год" /></label>
+      </div>
+      <button class="btn primary sm">${icon('plus')}Создать купон</button>
+    </form>
+    <div class="card table-wrap"><table class="table">
+      <thead><tr><th>Код</th><th>Скидка</th><th>Использован</th><th>Действует до</th><th>Заметка</th><th></th></tr></thead>
+      <tbody>${list.map((c) => html`<tr>
+        <td><code>${c.code}</code> ${c.active ? '' : html`<span class="badge">выключен</span>`}${c.expires && c.expires < Date.now() ? html`<span class="badge bad">истёк</span>` : ''}</td>
+        <td>${c.percent}%</td><td>${c.used}${c.max_uses ? ` из ${c.max_uses}` : ''}</td>
+        <td class="small muted nowrap">${c.expires ? fmt.date(c.expires) : 'бессрочно'}</td><td class="small muted">${c.note}</td>
+        <td class="right nowrap">${btnPost(req, `/admin/coupons/${c.id}/toggle`, c.active ? 'Выключить' : 'Включить')}${btnPost(req, `/admin/coupons/${c.id}/delete`, 'Удалить', 'ghost danger', '', `Удалить купон ${c.code}?`)}</td>
+      </tr>`)}</tbody></table>
+      ${list.length ? '' : html`<div class="empty"><b>Купонов пока нет</b></div>`}
+    </div>`, { flash });
+}
+
 function log(req, { list }) {
   return shell(req, '/admin/log', 'Журнал действий', html`
     <p class="muted">Все действия администраторов: модерация, выдача услуг, изменения заказов, тарифов и настроек.</p>
@@ -349,6 +381,11 @@ function settingsPage(req, { s, flash, hooks }) {
         <pre class="code">${hooks.feed}</pre>
         <p class="muted small">Оттуда лаунчер берёт баннер, новости, PROMO, топ и сервера для списка «Сетевая игра».</p>
       </div>
+      <div class="card pad"><h3>Голосование и промо-баллы</h3>
+        ${f('vote_cooldown_hours', 'Голосовать можно раз в … часов', '24', 'number')}
+        ${f('points_price', 'Цена 1 промо-балла на 7 дней, ₽', '10', 'number')}
+        <p class="muted small">Голоса доставляются на сервера через Votifier. Имя сервиса для плагинов — домен сайта. Цена баллов на другие сроки и скидки за пакеты считаются автоматически (см. «Реклама»).</p>
+      </div>
       <div class="card pad full"><h3>Статистика и онлайн</h3>
         <label class="check big"><input type="checkbox" name="show_launcher_online" ${s.show_launcher_online === '1' ? 'checked' : ''} />
           <span><b>Показывать «игроков в NLauncher»</b><small class="muted">Реальный онлайн лаунчера на сайте и в самом лаунчере. Пока игроков мало, можно выключить — тогда виден только общий онлайн серверов мониторинга.</small></span></label>
@@ -377,4 +414,4 @@ function settingsPage(req, { s, flash, hooks }) {
     </form>`, { flash });
 }
 
-module.exports = { dashboard, servers, serverDetail, grant, orders, products, news, users, launcherPage, log, settingsPage };
+module.exports = { dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };

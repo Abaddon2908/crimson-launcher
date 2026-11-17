@@ -121,6 +121,7 @@ const KINDS = {
   banner: { label: 'Баннер в лаунчере', short: 'Баннер' },
   highlight: { label: 'Выделение цветом', short: 'Выделение' },
   ingame: { label: 'Сервер в игре', short: 'В игре' },
+  points: { label: 'Промо-баллы', short: 'Баллы' },
 };
 
 db.exec(`
@@ -133,8 +134,47 @@ CREATE TABLE IF NOT EXISTS admin_log (
 );
 `);
 // миграции существующих баз
-const orderCols = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
-if (!orderCols.includes('note')) db.exec(`ALTER TABLE orders ADD COLUMN note TEXT NOT NULL DEFAULT ''`);
+/** Добавляет недостающие колонки в существующие базы (обновление без потери данных) */
+function addColumns(table, cols) {
+  const have = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name);
+  for (const [name, def] of Object.entries(cols)) if (!have.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${def}`);
+}
+addColumns('orders', {
+  note: `TEXT NOT NULL DEFAULT ''`,
+  points: 'INTEGER NOT NULL DEFAULT 0',   // промо-баллы
+  color: `TEXT NOT NULL DEFAULT ''`,      // цвет выделения
+  coupon: `TEXT NOT NULL DEFAULT ''`,
+  discount: 'INTEGER NOT NULL DEFAULT 0', // скидка в рублях (пакет + купон)
+});
+addColumns('servers', {
+  votifier_host: `TEXT NOT NULL DEFAULT ''`,
+  votifier_port: 'INTEGER NOT NULL DEFAULT 8192',
+  votifier_key: `TEXT NOT NULL DEFAULT ''`,
+  votifier_token: `TEXT NOT NULL DEFAULT ''`,
+  version_min: `TEXT NOT NULL DEFAULT ''`,
+  version_max: `TEXT NOT NULL DEFAULT ''`,
+});
+addColumns('votes', { rating: 'INTEGER NOT NULL DEFAULT 5' });
+db.exec(`
+CREATE TABLE IF NOT EXISTS coupons (
+  id INTEGER PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  percent INTEGER NOT NULL,
+  max_uses INTEGER NOT NULL DEFAULT 0,  -- 0 = без ограничения
+  used INTEGER NOT NULL DEFAULT 0,
+  expires INTEGER,                      -- null = бессрочно
+  active INTEGER NOT NULL DEFAULT 1,
+  note TEXT NOT NULL DEFAULT '',
+  created INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS server_daily (
+  server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  views INTEGER NOT NULL DEFAULT 0,
+  copies INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (server_id, day)
+);
+`);
 const insP = db.prepare('INSERT OR IGNORE INTO products (code, kind, title, description, price, days, slots, sort) VALUES (?,?,?,?,?,?,?,?)');
 for (const p of DEFAULT_PRODUCTS) insP.run(...p);
 
@@ -172,10 +212,13 @@ function topServers({ q = '', tag = '', limit = 100 } = {}) {
     SELECT s.*,
       (SELECT COUNT(*) FROM votes v WHERE v.server_id = s.id AND v.ts >= ?) AS votes,
       EXISTS (SELECT 1 FROM orders o WHERE o.server_id = s.id AND o.status = 'paid' AND o.kind = 'promo' AND o.starts <= ? AND o.ends > ?) AS promo,
-      EXISTS (SELECT 1 FROM orders o WHERE o.server_id = s.id AND o.status = 'paid' AND o.kind = 'highlight' AND o.starts <= ? AND o.ends > ?) AS highlight
+      EXISTS (SELECT 1 FROM orders o WHERE o.server_id = s.id AND o.status = 'paid' AND o.kind = 'highlight' AND o.starts <= ? AND o.ends > ?) AS highlight,
+      (SELECT o.color FROM orders o WHERE o.server_id = s.id AND o.status = 'paid' AND o.kind = 'highlight' AND o.starts <= ? AND o.ends > ? ORDER BY o.ends DESC LIMIT 1) AS hl_color,
+      (SELECT COALESCE(SUM(o.points), 0) FROM orders o WHERE o.server_id = s.id AND o.status = 'paid' AND o.kind = 'points' AND o.starts <= ? AND o.ends > ?) AS points
     FROM servers s
     WHERE s.status = 'approved'
-    ORDER BY promo DESC, votes DESC, s.online DESC, s.players DESC`).all(monthStart(), t, t, t, t);
+    -- PROMO-места сверху, затем по сумме активных промо-баллов, затем по голосам
+    ORDER BY promo DESC, points DESC, votes DESC, s.online DESC, s.players DESC`).all(monthStart(), t, t, t, t, t, t, t, t);
   const ql = String(q).trim().toLowerCase();
   const tl = String(tag).trim().toLowerCase();
   return rows
@@ -211,10 +254,12 @@ function markPaid(orderId, provider, ref = '', { startNow = false } = {}) {
     || { kind: o.kind, slots: 0 };
   // продление: если у сервера уже есть активный заказ того же типа — начинаем после него
   const last = db.prepare(`SELECT MAX(ends) AS e FROM orders WHERE server_id = ? AND kind = ? AND status = 'paid'`).get(o.server_id, o.kind)?.e || 0;
-  const starts = startNow ? now() : Math.max(now(), last, nextFreeStart(product));
+  // промо-баллы складываются: каждая покупка действует со своего момента, без очереди
+  const starts = startNow || o.kind === 'points' ? now() : Math.max(now(), last, nextFreeStart(product));
   const ends = starts + o.days * DAY;
   db.prepare(`UPDATE orders SET status = 'paid', provider = ?, provider_ref = ?, paid_at = ?, starts = ?, ends = ? WHERE id = ?`)
     .run(provider, String(ref), now(), starts, ends, orderId);
+  if (o.coupon) db.prepare('UPDATE coupons SET used = used + 1 WHERE code = ?').run(o.coupon); // купон засчитывается при оплате
   return db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
 }
 

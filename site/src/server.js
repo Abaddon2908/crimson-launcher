@@ -10,10 +10,14 @@ const auth = require('./auth');
 const pinger = require('./pinger');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
-const { safeUrl } = require('./views/html');
+const { safeUrl, fmt } = require('./views/html');
 const { serverPath, slugify } = require('./seo');
 const V = { pub: require('./views/public'), cab: require('./views/cabinet'), adm: require('./views/admin') };
 const stats = require('./stats');
+const votifier = require('./votifier');
+const tags = require('./tags');
+const srvstats = require('./srvstats');
+const pricing = require('./pricing');
 
 const PORT = Number(process.env.PORT) || 3000;
 const LAUNCHER_DOWNLOAD = process.env.LAUNCHER_DOWNLOAD_URL || 'https://github.com/Abaddon2908/crimson-launcher/releases/latest';
@@ -108,15 +112,63 @@ function bannerData() {
 }
 
 /* ======================= Публичная часть ======================= */
+/* ---- подборки: /servera-vyzhivanie/, /servera-1.21/, каталог /servera/ ---- */
+function catalogCounts() {
+  const all = topServers({ limit: 100000 });
+  const byTag = {};
+  for (const s of all) for (const t of s.tagList) byTag[t] = (byTag[t] || 0) + 1;
+  const byVer = {};
+  for (const v of tags.VERSIONS) byVer[v] = all.filter((s) => tags.serverSupports(s, v)).length;
+  return { all, byTag, byVer };
+}
+app.get(['/servera', '/servera/'], (req, res) => {
+  const { all, byTag, byVer } = catalogCounts();
+  send(res, V.pub.catalog(req, { total: all.length, byTag, byVer }));
+});
+app.get('/servera-:slug', (req, res, next) => {
+  const slug = String(req.params.slug).replace(/\/$/, '');
+  if (!req.path.endsWith('/')) return res.redirect(301, `/servera-${slug}/`);
+  const tag = tags.BY_SLUG.get(slug);
+  const version = !tag && tags.isVersion(slug) ? slug : null;
+  if (!tag && !version) return next();
+  const all = topServers({ limit: 100000 });
+  const list = tag ? all.filter((s) => s.tagList.some((t) => t.toLowerCase() === tag.name.toLowerCase())) : all.filter((s) => tags.serverSupports(s, version));
+  // соседние подборки для перелинковки
+  const { byTag } = catalogCounts();
+  const related = tag
+    ? tags.TAGS.filter((t) => t.group === tag.group && t.slug !== tag.slug && byTag[t.name]).slice(0, 12)
+    : tags.VERSIONS.filter((v) => v !== version && Math.abs(tags.VERSIONS.indexOf(v) - tags.VERSIONS.indexOf(version)) <= 4);
+  send(res, V.pub.listPage(req, { tag, version, servers: list.slice(0, 200), total: list.length, related, byTag }));
+});
+app.get('/new', (req, res) => {
+  const list = topServers({ limit: 100000 }).filter((s) => s.created > now() - 30 * DAY).sort((a, b) => b.created - a.created);
+  send(res, V.pub.listPage(req, { fresh: true, servers: list.slice(0, 100), total: list.length, related: [] }));
+});
+app.get('/favorites', (req, res) => send(res, V.pub.favorites(req)));
+app.get('/favorites/list', (req, res) => {
+  const ids = String(req.query.ids || '').split(',').map(Number).filter((x) => x > 0).slice(0, 100);
+  const all = topServers({ limit: 100000 });
+  const list = ids.map((id) => all.find((s) => s.id === id)).filter(Boolean);
+  res.type('html').send(String(V.pub.serverRows(list)));
+});
+app.get('/votifier', (req, res) => send(res, V.pub.votifierPage(req, { service: V.cab.voteService() })));
+app.get('/vote/:id', (req, res) => {
+  const s = db.prepare(`SELECT id, name FROM servers WHERE id = ? AND status = 'approved'`).get(int(req.params.id));
+  res.redirect(302, s ? `${serverPath(s)}#vote` : '/');
+});
+
 app.get('/', (req, res) => {
   const q = str(req.query.q, 60);
   const tag = str(req.query.tag, 30);
+  // старые адреса ?tag=… → постоянные страницы подборок
+  const known = tag && tags.BY_NAME.get(tag.toLowerCase());
+  if (known && !q) return res.redirect(301, `/servera-${known.slug}/`);
   const servers = topServers({ q, tag });
   const tagCounts = {};
   for (const s of topServers({ limit: 500 })) for (const t of s.tagList) tagCounts[t] = (tagCounts[t] || 0) + 1;
-  const tags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
+  const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 8).map((x) => x[0]);
   const news = db.prepare('SELECT * FROM news WHERE published = 1 ORDER BY created DESC LIMIT 3').all();
-  send(res, V.pub.home(req, { servers, banner: bannerData(), stats: siteStats(), q, tag, tags, news }));
+  send(res, V.pub.home(req, { servers, banner: bannerData(), stats: siteStats(), q, tag, tags: topTags, news }));
 });
 
 function loadServer(id) {
@@ -133,38 +185,133 @@ app.get('/server/:id', (req, res) => {
   // единый адрес страницы: /server/12 и /server/12-old-name → 301 на /server/12-craftlands
   const canonical = serverPath(s);
   if (req.path !== canonical) return res.redirect(301, canonical + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : ''));
+  if (!owner) srvstats.track(s.id, 'views', { visitor: req.csrf, ua: req.get('user-agent') });
   const range = ['day', 'week', 'month'].includes(req.query.range) ? req.query.range : 'day';
   const ms = { day: DAY, week: 7 * DAY, month: 30 * DAY }[range];
-  const votes = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, monthStart()).n;
-  const rank = s.status === 'approved' ? topServers({ limit: 1000 }).find((x) => x.id === s.id)?.rank : null;
-  send(res, V.pub.server(req, { s, votes, points: pinger.history(s.id, ms, range === 'day' ? 48 : 56), range, voted: req.query.voted === '1', error: str(req.query.error), owner, rank }));
+  const ms0 = monthStart();
+  const votes = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, ms0).n;
+
+  // места в рейтингах (только среди опубликованных)
+  let ranks = null;
+  if (s.status === 'approved') {
+    const all = topServers({ limit: 100000 });
+    const total = all.length;
+    const byVotes = [...all].sort((a, b) => b.votes - a.votes);
+    const byOnline = [...all].sort((a, b) => b.players - a.players);
+    const pos = (list) => list.findIndex((x) => x.id === s.id) + 1;
+    const top = (p) => Math.max(1, Math.ceil((p / total) * 100));
+    ranks = { total, overall: pos(all), votes: pos(byVotes), online: pos(byOnline) };
+    ranks.votesTop = top(ranks.votes); ranks.onlineTop = top(ranks.online);
+  }
+  // средний онлайн за 7 дней и аптайм за 30 дней по истории пингов
+  const avg7 = db.prepare('SELECT AVG(players) AS a, COUNT(*) AS n FROM pings WHERE server_id = ? AND ts >= ?').get(s.id, now() - 7 * DAY);
+  const up30 = db.prepare('SELECT AVG(online) AS a, COUNT(*) AS n FROM pings WHERE server_id = ? AND ts >= ?').get(s.id, now() - 30 * DAY);
+  // голоса: последние, топ голосующих, средняя оценка
+  const recentVotes = db.prepare('SELECT nickname, rating, ts FROM votes WHERE server_id = ? ORDER BY ts DESC LIMIT 10').all(s.id);
+  const topVoters = db.prepare('SELECT nickname, COUNT(*) AS n, MAX(ts) AS last FROM votes WHERE server_id = ? AND ts >= ? GROUP BY ulower(nickname) ORDER BY n DESC, last DESC LIMIT 10').all(s.id, ms0);
+  const rating = db.prepare('SELECT AVG(rating) AS a, COUNT(*) AS n FROM votes WHERE server_id = ?').get(s.id);
+  // похожие: общие теги, затем голоса
+  const myTags = String(s.tags || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const similar = myTags.length ? topServers({ limit: 100000 })
+    .filter((x) => x.id !== s.id)
+    .map((x) => ({ ...x, shared: x.tagList.filter((t) => myTags.includes(t)).length }))
+    .filter((x) => x.shared > 0)
+    .sort((a, b) => b.shared - a.shared || b.votes - a.votes)
+    .slice(0, 4) : [];
+
+  send(res, V.pub.server(req, {
+    s, votes, points: pinger.history(s.id, ms, range === 'day' ? 48 : 56), range, voted: req.query.voted === '1', error: str(req.query.error), owner,
+    rank: ranks?.overall, ranks,
+    avgOnline: avg7.n ? Math.round(avg7.a) : null, uptime: up30.n ? Math.round(up30.a * 1000) / 10 : null,
+    recentVotes, topVoters, rating: rating.n ? { avg: Math.round(rating.a * 10) / 10, n: rating.n } : null,
+    similar, copies: srvstats.totals(s.id), cooldownH: voteCooldownMs() / 3600000,
+  }));
 });
 
-async function deliverVote(server, nickname, voteId) {
-  const url = safeUrl(server.vote_webhook);
-  if (!url) return;
-  const timestamp = now();
-  const signature = crypto.createHmac('sha256', server.vote_secret).update(`${nickname}:${timestamp}`).digest('hex');
-  try {
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'NeoDev-Monitoring' }, body: JSON.stringify({ server_id: server.id, nickname, timestamp, signature }), signal: AbortSignal.timeout(8000) });
-    if (r.ok) db.prepare('UPDATE votes SET delivered = 1 WHERE id = ?').run(voteId);
-  } catch { /* сервер недоступен — голос всё равно засчитан */ }
+/* ---- виджеты для сайтов серверов ---- */
+function widgetData(id) {
+  const s = db.prepare(`SELECT id, name, address, online, players, max_players, favicon FROM servers WHERE id = ? AND status = 'approved'`).get(id);
+  if (!s) return null;
+  const votes = db.prepare('SELECT COUNT(*) AS n FROM votes WHERE server_id = ? AND ts >= ?').get(s.id, monthStart()).n;
+  return { s, votes };
 }
+// данные для живой кнопки голосования (CORS — вызывается с чужих сайтов)
+app.get('/api/server/:id/widget.json', (req, res) => {
+  const w = widgetData(int(req.params.id));
+  res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=120' });
+  if (!w) return res.status(404).json({ error: 'not found' });
+  res.json({ id: w.s.id, name: w.s.name, votes: w.votes, online: Boolean(w.s.online), players: w.s.players, max: w.s.max_players, url: settings.get('site_url').replace(/\/$/, '') + serverPath(w.s) });
+});
+// SVG-виджет онлайна: <img src="https://nlauncher.ru/widget/server/ID.svg">
+app.get('/widget/server/:file', (req, res) => {
+  const m = /^(\d+)\.svg$/.exec(req.params.file);
+  const w = m && widgetData(int(m[1]));
+  if (!w) return res.status(404).type('text/plain').send('not found');
+  const light = req.query.theme === 'light';
+  const e = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const C = light ? { bg: '#ffffff', line: '#ecdfe0', text: '#1d1416', muted: '#7d6f71', accent: '#a3454f' } : { bg: '#171214', line: '#2a2124', text: '#eee6e7', muted: '#9b8f91', accent: '#c4747c' };
+  const s = w.s;
+  const name = s.name.length > 24 ? `${s.name.slice(0, 23)}…` : s.name;
+  const fav = /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(s.favicon || '') ? `<image href="${s.favicon}" x="14" y="14" width="56" height="56" clip-path="url(#r)"/>` : `<rect x="14" y="14" width="56" height="56" rx="12" fill="${C.accent}"/><text x="42" y="51" text-anchor="middle" font-size="24" font-weight="700" fill="#fff">${e(s.name[0] || '?')}</text>`;
+  const status = s.online ? `<circle cx="88" cy="50" r="4" fill="#6fbf8e"/><text x="98" y="54" font-size="13" fill="${C.text}" font-weight="600">${s.players} / ${s.max_players} онлайн</text>` : `<circle cx="88" cy="50" r="4" fill="#c9636c"/><text x="98" y="54" font-size="13" fill="${C.muted}">офлайн</text>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="84" viewBox="0 0 320 84" font-family="Manrope,'Segoe UI',Arial,sans-serif">
+<defs><clipPath id="r"><rect x="14" y="14" width="56" height="56" rx="12"/></clipPath></defs>
+<rect x=".5" y=".5" width="319" height="83" rx="16" fill="${C.bg}" stroke="${C.line}"/>
+${fav}
+<text x="82" y="31" font-size="15" font-weight="700" fill="${C.text}">${e(name)}</text>
+${status}
+<text x="82" y="72" font-size="11.5" fill="${C.muted}">${e(s.address)}</text>
+<text x="306" y="72" text-anchor="end" font-size="11" fill="${C.accent}" font-weight="700">★ ${w.votes}</text>
+</svg>`;
+  res.set({ 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'Access-Control-Allow-Origin': '*' }).send(svg);
+});
+
+// копирование IP (с главной, страниц подборок и страницы сервера)
+app.post('/api/server/:id/copy', limiter(60_000, 30), (req, res) => {
+  srvstats.track(int(req.params.id), 'copies', { visitor: req.csrf, ua: req.get('user-agent') });
+  res.status(204).end();
+});
+
+/** Доставка голоса: Votifier (v1/v2) и/или HTTP-вебхук. Возвращает результат Votifier (для проверки из кабинета) */
+async function deliverVote(server, nickname, voteId, ip = '') {
+  let result = null;
+  if (server.votifier_host && (server.votifier_key || server.votifier_token)) {
+    result = await votifier.send(
+      { host: server.votifier_host, port: server.votifier_port, key: server.votifier_key, token: server.votifier_token },
+      { service: V.cab.voteService(), username: nickname, address: ip || '127.0.0.1' },
+    );
+    if (result.ok && voteId) db.prepare('UPDATE votes SET delivered = 1 WHERE id = ?').run(voteId);
+    if (!result.ok) console.warn(`[votifier] ${server.name}: ${result.error}`);
+  }
+  const url = safeUrl(server.vote_webhook);
+  if (url) {
+    const timestamp = now();
+    const signature = crypto.createHmac('sha256', server.vote_secret).update(`${nickname}:${timestamp}`).digest('hex');
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'NeoDev-Monitoring' }, body: JSON.stringify({ server_id: server.id, nickname, timestamp, signature }), signal: AbortSignal.timeout(8000) });
+      if (r.ok && voteId) db.prepare('UPDATE votes SET delivered = 1 WHERE id = ?').run(voteId);
+    } catch { /* сервер недоступен — голос всё равно засчитан */ }
+  }
+  return result;
+}
+
+const voteCooldownMs = () => Math.min(168, Math.max(1, Number(settings.get('vote_cooldown_hours')) || 24)) * 3600000;
 
 app.post('/server/:id/vote', limiter(60_000, 10), (req, res) => {
   const s = db.prepare(`SELECT * FROM servers WHERE id = ? AND status = 'approved'`).get(int(req.params.id));
   if (!s) return res.redirect('/');
   const nick = str(req.body.nickname, 16);
-  const back = (q) => res.redirect(`${serverPath(s)}?${q}`);
+  const rating = Math.min(5, Math.max(1, int(req.body.rating) || 5));
+  const back = (q) => res.redirect(`${serverPath(s)}?${q}#vote`);
   if (!/^[A-Za-z0-9_]{3,16}$/.test(nick)) return back(`error=${encodeURIComponent('Ник: 3–16 символов, латиница, цифры и _')}`);
-  const since = now() - DAY;
-  const dup = db.prepare('SELECT ts FROM votes WHERE server_id = ? AND (lower(nickname) = lower(?) OR ip = ?) AND ts > ? ORDER BY ts DESC LIMIT 1').get(s.id, nick, req.ip, since);
+  const cd = voteCooldownMs();
+  const dup = db.prepare('SELECT ts FROM votes WHERE server_id = ? AND (ulower(nickname) = ? OR ip = ?) AND ts > ? ORDER BY ts DESC LIMIT 1').get(s.id, nick.toLowerCase(), req.ip, now() - cd);
   if (dup) {
-    const left = Math.ceil((dup.ts + DAY - now()) / 3600000);
+    const left = Math.max(1, Math.ceil((dup.ts + cd - now()) / 3600000));
     return back(`error=${encodeURIComponent(`Вы уже голосовали. Следующий голос — через ${left} ч.`)}`);
   }
-  const r = db.prepare('INSERT INTO votes (server_id, nickname, ip, ts) VALUES (?, ?, ?, ?)').run(s.id, nick, req.ip, now());
-  deliverVote(s, nick, r.lastInsertRowid);
+  const r = db.prepare('INSERT INTO votes (server_id, nickname, ip, ts, rating) VALUES (?, ?, ?, ?, ?)').run(s.id, nick, req.ip, now(), rating);
+  deliverVote(s, nick, r.lastInsertRowid, req.ip);
   back('voted=1');
 });
 
@@ -199,13 +346,19 @@ app.get('/sitemap.xml', (req, res) => {
     { loc: '/launcher', changefreq: 'weekly', priority: '0.8' },
     { loc: '/ads', changefreq: 'weekly', priority: '0.6' },
     { loc: '/stats', changefreq: 'hourly', priority: '0.7' },
+    { loc: '/servera/', changefreq: 'daily', priority: '0.8' },
+    { loc: '/new', changefreq: 'daily', priority: '0.7' },
+    { loc: '/votifier', changefreq: 'monthly', priority: '0.4' },
   ];
   const tagCounts = {};
   for (const s of topServers({ limit: 5000 })) {
     urls.push({ loc: serverPath(s), changefreq: 'daily', priority: s.rank <= 20 ? '0.8' : '0.6', lastmod: day(s.last_ping || s.created) });
     for (const t of s.tagList) tagCounts[t] = (tagCounts[t] || 0) + 1;
   }
-  for (const t of Object.keys(tagCounts)) urls.push({ loc: `/?tag=${encodeURIComponent(t)}`, changefreq: 'daily', priority: '0.7' });
+  // подборки по тегам и версиям — только непустые
+  for (const t of Object.keys(tagCounts)) { const c = tags.BY_NAME.get(t.toLowerCase()); if (c) urls.push({ loc: `/servera-${c.slug}/`, changefreq: 'daily', priority: '0.8' }); }
+  const allSrv = topServers({ limit: 100000 });
+  for (const v of tags.VERSIONS) if (allSrv.some((s) => tags.serverSupports(s, v))) urls.push({ loc: `/servera-${v}/`, changefreq: 'daily', priority: '0.7' });
   res.type('application/xml').set('Cache-Control', 'public, max-age=3600').send(
     '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
     + urls.map((u) => `  <url><loc>${x(base + u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}<changefreq>${u.changefreq}</changefreq><priority>${u.priority}</priority></url>`).join('\n')
@@ -274,28 +427,40 @@ cab.get('/', (req, res) => {
 });
 
 function readServerForm(body) {
-  return {
-    name: str(body.name, 40), address: str(body.address, 80).toLowerCase(), version: str(body.version, 30),
-    tags: str(body.tags, 100).split(',').map((t) => t.trim()).filter(Boolean).slice(0, 6).join(', '),
+  const vmin = tags.isVersion(body.version_min) ? body.version_min : '';
+  let vmax = tags.isVersion(body.version_max) ? body.version_max : '';
+  if (vmin && vmax && tags.cmp(vmax, vmin) < 0) vmax = vmin; // перепутали местами
+  const d = {
+    name: str(body.name, 40), address: str(body.address, 80).toLowerCase(),
+    version_min: vmin, version_max: vmax,
+    tags: tags.normalizeTags(body.tags).join(', '),
     description: str(body.description, 3000), website: safeUrl(body.website), discord: safeUrl(body.discord),
     banner: safeUrl(body.banner), vote_webhook: safeUrl(body.vote_webhook),
+    votifier_host: str(body.votifier_host, 100), votifier_port: Math.min(65535, Math.max(1, int(body.votifier_port) || 8192)),
+    votifier_key: str(body.votifier_key, 2000).replace(/\s+/g, ''), votifier_token: str(body.votifier_token, 200),
   };
+  d.version = tags.versionLabel(d);
+  return d;
 }
 function validateServer(d, selfId = 0) {
   if (!d.name) return 'Укажите название';
   if (!ADDR_RE.test(d.address)) return 'Некорректный IP-адрес';
-  const dup = db.prepare('SELECT id FROM servers WHERE lower(address) = ? AND id != ?').get(d.address, selfId);
+  const dup = db.prepare('SELECT id FROM servers WHERE ulower(address) = ? AND id != ?').get(d.address, selfId);
   if (dup) return 'Сервер с таким адресом уже есть в мониторинге';
+  if (d.votifier_host && !/^[A-Za-z0-9.-]+$/.test(d.votifier_host)) return 'Некорректный IP для Votifier';
+  const keyErr = votifier.validateKey(d.votifier_key);
+  if (keyErr) return keyErr;
   return '';
 }
+const SERVER_COLS = ['name', 'address', 'version', 'version_min', 'version_max', 'tags', 'description', 'website', 'discord', 'banner', 'vote_webhook', 'votifier_host', 'votifier_port', 'votifier_key', 'votifier_token'];
 
 cab.get('/servers/new', (req, res) => send(res, V.cab.serverForm(req, { isNew: true })));
 cab.post('/servers/new', limiter(60 * 60_000, 10), (req, res) => {
   const d = readServerForm(req.body);
   const err = validateServer(d);
   if (err) return send(res, V.cab.serverForm(req, { isNew: true, s: d, error: err }), 400);
-  const r = db.prepare(`INSERT INTO servers (owner_id, name, address, version, tags, description, website, discord, banner, vote_webhook, vote_secret, created)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, d.name, d.address, d.version, d.tags, d.description, d.website, d.discord, d.banner, d.vote_webhook, crypto.randomBytes(24).toString('hex'), now());
+  const r = db.prepare(`INSERT INTO servers (owner_id, ${SERVER_COLS.join(', ')}, vote_secret, created) VALUES (?, ${SERVER_COLS.map(() => '?').join(', ')}, ?, ?)`)
+    .run(req.user.id, ...SERVER_COLS.map((k) => d[k]), crypto.randomBytes(24).toString('hex'), now());
   pinger.pingServer({ id: Number(r.lastInsertRowid), address: d.address }).catch(() => {});
   res.redirect('/cabinet?created=1');
 });
@@ -304,12 +469,23 @@ function ownServer(req) {
   const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(int(req.params.id));
   return s && (s.owner_id === req.user.id || req.user.role === 'admin') ? s : null;
 }
+cab.get('/servers/:id/widgets', (req, res) => {
+  const s = ownServer(req);
+  if (!s) return res.redirect('/cabinet');
+  send(res, V.cab.widgets(req, { s, base: settings.get('site_url').replace(/\/$/, ''), page: serverPath(s) }));
+});
+cab.get('/servers/:id/stats', (req, res) => {
+  const s = ownServer(req);
+  if (!s) return res.redirect('/cabinet');
+  send(res, V.cab.serverStats(req, { s, hist: srvstats.history(s.id, 30), totals: srvstats.totals(s.id) }));
+});
 cab.get('/servers/:id', (req, res) => {
   const s = ownServer(req);
   if (!s) return send(res, V.pub.message(req, 'Не найдено', 'Сервер не найден или принадлежит другому пользователю.'), 404);
-  send(res, V.cab.serverForm(req, { s }));
+  const flash = { saved: 'Сохранено' }[req.query.f] || '';
+  send(res, V.cab.serverForm(req, { s, flash }));
 });
-cab.post('/servers/:id', (req, res) => {
+cab.post('/servers/:id', async (req, res) => {
   const s = ownServer(req);
   if (!s) return res.redirect('/cabinet');
   if (req.body._action === 'delete') {
@@ -320,9 +496,17 @@ cab.post('/servers/:id', (req, res) => {
   const err = validateServer(d, s.id);
   if (err) return send(res, V.cab.serverForm(req, { s: { ...s, ...d }, error: err }), 400);
   const status = d.address !== s.address && req.user.role !== 'admin' ? 'pending' : s.status;
-  db.prepare(`UPDATE servers SET name=?, address=?, version=?, tags=?, description=?, website=?, discord=?, banner=?, vote_webhook=?, status=? WHERE id=?`)
-    .run(d.name, d.address, d.version, d.tags, d.description, d.website, d.discord, d.banner, d.vote_webhook, status, s.id);
-  res.redirect('/cabinet?saved=1');
+  db.prepare(`UPDATE servers SET ${SERVER_COLS.map((k) => `${k} = ?`).join(', ')}, status = ? WHERE id = ?`).run(...SERVER_COLS.map((k) => d[k]), status, s.id);
+  if (req.body._action === 'votifier_test') {
+    const fresh = db.prepare('SELECT * FROM servers WHERE id = ?').get(s.id);
+    const nick = /^[A-Za-z0-9_]{3,16}$/.test(str(req.body.test_nick, 16)) ? str(req.body.test_nick, 16) : 'NLauncherTest';
+    const r = fresh.votifier_host && (fresh.votifier_key || fresh.votifier_token)
+      ? await deliverVote(fresh, nick, 0, req.ip)
+      : { ok: false, error: 'Заполните IP Votifier и публичный ключ или токен' };
+    const msg = r.ok ? `✓ Votifier работает (${r.version}): тестовый голос от ${nick} доставлен — проверьте консоль сервера` : `✗ Votifier: ${r.error}`;
+    return send(res, V.cab.serverForm(req, { s: fresh, flash: r.ok ? msg : '', error: r.ok ? '' : msg }));
+  }
+  res.redirect(`/cabinet/servers/${s.id}?f=saved`);
 });
 
 cab.get('/orders', (req, res) => {
@@ -344,26 +528,51 @@ function payMethods() {
 
 cab.get('/buy', (req, res) => {
   const servers = db.prepare(`SELECT id, name, address FROM servers WHERE owner_id = ? AND status = 'approved' ORDER BY name`).all(req.user.id);
-  send(res, V.cab.buy(req, { servers, products: productsWithAvailability(), sel: { server: int(req.query.server), product: int(req.query.product) }, methods: payMethods() }));
+  const product = req.query.product === 'points' ? 'points' : int(req.query.product) || 'points';
+  send(res, V.cab.buy(req, { servers, products: productsWithAvailability(), sel: { server: int(req.query.server), product }, methods: payMethods(), pricing }));
 });
 
 cab.post('/buy', limiter(60_000, 15), (req, res) => {
   const server = db.prepare(`SELECT * FROM servers WHERE id = ? AND owner_id = ? AND status = 'approved'`).get(int(req.body.server_id), req.user.id);
-  const product = db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(int(req.body.product_id));
+  const isPoints = req.body.product_id === 'points';
+  const product = isPoints ? null : db.prepare('SELECT * FROM products WHERE id = ? AND active = 1').get(int(req.body.product_id));
   const method = str(req.body.method, 20);
+  const values = { points: int(req.body.points), days: int(req.body.days), color: str(req.body.color, 10), coupon: str(req.body.coupon, 30).toUpperCase() };
   const fail = (error) => {
     const servers = db.prepare(`SELECT id, name, address FROM servers WHERE owner_id = ? AND status = 'approved' ORDER BY name`).all(req.user.id);
-    send(res, V.cab.buy(req, { servers, products: productsWithAvailability(), sel: { server: int(req.body.server_id), product: int(req.body.product_id) }, methods: payMethods(), error }), 400);
+    send(res, V.cab.buy(req, { servers, products: productsWithAvailability(), sel: { server: int(req.body.server_id), product: isPoints ? 'points' : int(req.body.product_id) }, methods: payMethods(), pricing, values, error }), 400);
   };
   if (!server) return fail('Выберите сервер');
-  if (!product) return fail('Выберите тариф');
+  if (!isPoints && !product) return fail('Выберите услугу');
   if (!payMethods().some((m) => m.id === method)) return fail('Выберите способ оплаты');
-  const banner = product.kind === 'banner'
+
+  // цена: промо-баллы считаются по формуле, остальное — по тарифу
+  let kind, title, amount, days, points = 0, packOff = 0;
+  if (isPoints) {
+    const q = pricing.pointsQuote(values.points, values.days);
+    if (!q) return fail('Промо-баллы: от 5 до 10 000 (шаг 5) и срок из списка');
+    kind = 'points'; days = q.days; points = q.points; amount = q.total; packOff = q.packDiscount;
+    title = `${fmt.plural(q.points, 'промо-балл', 'промо-балла', 'промо-баллов')} на ${q.days} дн.`;
+  } else {
+    kind = product.kind; title = product.title; amount = product.price; days = product.days;
+  }
+  const c = pricing.checkCoupon(values.coupon);
+  if (c.error) return fail(c.error);
+  const withCoupon = pricing.applyCoupon(amount, c.pct);
+  const color = kind === 'highlight' && pricing.COLORS[values.color] ? values.color : '';
+  const banner = kind === 'banner'
     ? { t: str(req.body.banner_title, 60) || server.name, x: str(req.body.banner_text, 140), i: safeUrl(req.body.banner_image), u: safeUrl(req.body.banner_url) }
     : { t: '', x: '', i: '', u: '' };
-  const r = db.prepare(`INSERT INTO orders (user_id, server_id, product_id, kind, title, amount, days, provider, banner_title, banner_text, banner_image, banner_url, created)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, server.id, product.id, product.kind, product.title, product.price, product.days, method.startsWith('yoomoney') ? 'yoomoney' : 'heleket', banner.t, banner.x, banner.i, banner.u, now());
+  const r = db.prepare(`INSERT INTO orders (user_id, server_id, product_id, kind, title, amount, days, points, color, coupon, discount, provider, banner_title, banner_text, banner_image, banner_url, created)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, server.id, product ? product.id : null, kind, title, withCoupon.amount, days, points, color,
+    c.coupon ? c.coupon.code : '', packOff + withCoupon.off, method.startsWith('yoomoney') ? 'yoomoney' : 'heleket', banner.t, banner.x, banner.i, banner.u, now());
   res.redirect(`/cabinet/pay/${r.lastInsertRowid}?m=${method}`);
+});
+
+// проверка купона на лету (для подсказки в форме)
+cab.get('/coupon', (req, res) => {
+  const c = pricing.checkCoupon(str(req.query.code, 30));
+  res.json(c.error ? { ok: false, error: c.error } : { ok: Boolean(c.coupon), pct: c.pct });
 });
 
 cab.get('/pay/:id', async (req, res) => {
@@ -469,6 +678,7 @@ const flashOf = (req) => ({
   ok: 'Готово', saved: 'Сохранено', granted: 'Услуга выдана и уже работает',
   nouser: '⚠ Пользователь с таким email не найден — владелец не изменён',
   shortpw: '⚠ Пароль не изменён: нужно минимум 8 символов',
+  dupcoupon: '⚠ Купон с таким кодом уже есть',
 }[req.query.f] || '');
 const audit = (req, action, details) => logAdmin(req.user.id, action, details);
 const serverName = (id) => db.prepare('SELECT name FROM servers WHERE id = ?').get(id)?.name || `#${id}`;
@@ -601,16 +811,41 @@ adm.post('/grant', (req, res) => {
   if (!s) return fail('Выберите сервер');
   if (!KINDS[kind]) return fail('Выберите услугу');
   if (!(days >= 1 && days <= 3650)) return fail('Срок — от 1 до 3650 дней');
-  const product = db.prepare('SELECT id FROM products WHERE kind = ? ORDER BY active DESC, price LIMIT 1').get(kind);
+  const product = kind === 'points' ? null : db.prepare('SELECT id FROM products WHERE kind = ? ORDER BY active DESC, price LIMIT 1').get(kind);
+  const points = kind === 'points' ? Math.round(int(req.body.points) / 5) * 5 : 0;
+  if (kind === 'points' && !(points >= 5 && points <= 10000)) return fail('Промо-баллы: от 5 до 10 000');
   const b = kind === 'banner'
     ? { t: str(req.body.banner_title, 60) || s.name, x: str(req.body.banner_text, 140), i: safeUrl(req.body.banner_image), u: safeUrl(req.body.banner_url) }
     : { t: '', x: '', i: '', u: '' };
-  const r = db.prepare(`INSERT INTO orders (user_id, server_id, product_id, kind, title, amount, days, provider, banner_title, banner_text, banner_image, banner_url, note, created)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?)`)
-    .run(s.owner_id, s.id, product?.id ?? null, kind, `${KINDS[kind].label} — ${days} дн. (выдано админом)`, amount, days, b.t, b.x, b.i, b.u, str(req.body.note, 200), now());
+  const title = kind === 'points' ? `${points} промо-баллов на ${days} дн. (выдано админом)` : `${KINDS[kind].label} — ${days} дн. (выдано админом)`;
+  const r = db.prepare(`INSERT INTO orders (user_id, server_id, product_id, kind, title, amount, days, points, provider, banner_title, banner_text, banner_image, banner_url, note, created)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', ?, ?, ?, ?, ?, ?)`)
+    .run(s.owner_id, s.id, product?.id ?? null, kind, title, amount, days, points, b.t, b.x, b.i, b.u, str(req.body.note, 200), now());
   const o = markPaid(Number(r.lastInsertRowid), 'manual', `admin:${req.user.id}`, { startNow: Boolean(req.body.start_now) });
-  audit(req, 'Выдал услугу', `${KINDS[kind].label} на ${days} дн. → ${s.name}${amount ? `, ${amount} ₽` : ''} (заказ #${o.id})`);
+  audit(req, 'Выдал услугу', `${kind === 'points' ? `${points} промо-баллов` : KINDS[kind].label} на ${days} дн. → ${s.name}${amount ? `, ${amount} ₽` : ''} (заказ #${o.id})`);
   res.redirect(`/admin/servers/${s.id}?f=granted`);
+});
+
+/* ---- купоны ---- */
+adm.get('/coupons', (req, res) => send(res, V.adm.coupons(req, { list: db.prepare('SELECT * FROM coupons ORDER BY id DESC').all(), flash: flashOf(req) })));
+adm.post('/coupons', (req, res) => {
+  let code = str(req.body.code, 30).toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+  if (!code) code = `ND${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+  const pct = Math.min(90, Math.max(1, int(req.body.percent)));
+  const days = Math.max(0, int(req.body.days));
+  try {
+    db.prepare('INSERT INTO coupons (code, percent, max_uses, expires, note, created) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(code, pct, Math.max(0, int(req.body.max_uses)), days ? now() + days * DAY : null, str(req.body.note, 100), now());
+    audit(req, 'Создал купон', `${code}: −${pct}%`);
+    res.redirect('/admin/coupons?f=saved');
+  } catch { res.redirect('/admin/coupons?f=dupcoupon'); }
+});
+adm.post('/coupons/:id/toggle', (req, res) => { db.prepare('UPDATE coupons SET active = 1 - active WHERE id = ?').run(int(req.params.id)); res.redirect('/admin/coupons'); });
+adm.post('/coupons/:id/delete', (req, res) => {
+  const c = db.prepare('SELECT code FROM coupons WHERE id = ?').get(int(req.params.id));
+  db.prepare('DELETE FROM coupons WHERE id = ?').run(int(req.params.id));
+  if (c) audit(req, 'Удалил купон', c.code);
+  res.redirect('/admin/coupons?f=ok');
 });
 
 /* ---- заказы ---- */
@@ -762,7 +997,7 @@ adm.get('/log', (req, res) => {
 });
 
 /* ---- настройки ---- */
-const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification'];
+const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
   send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));
