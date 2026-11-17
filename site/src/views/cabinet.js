@@ -234,7 +234,7 @@ function buy(req, { servers, products, sel, error, methods, pricing, values = {}
       </div>
       <div class="card pad pay-box">
         <h3>Оплата</h3>
-        <label class="field"><span>Купон (если есть)</span><input class="input" name="coupon" value="${values.coupon || ''}" placeholder="NEODEV10" autocomplete="off" style="text-transform:uppercase" /></label>
+        <label class="field"><span>Купон (если есть)</span><input class="input" name="coupon" value="${values.coupon || ''}" placeholder="NL10" autocomplete="off" style="text-transform:uppercase" /></label>
         <div class="price-lines" id="priceLines"></div>
         <div class="total"><span class="muted">К оплате</span><b id="total">${fmt.rub(q ? q.total : 0)}</b></div>
         ${methods.length ? methods.map((m, i) => html`

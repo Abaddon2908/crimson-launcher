@@ -35,6 +35,14 @@ function serverRow(s) {
   </a>`;
 }
 
+const HOME_FAQ = [
+  ['Что такое мониторинг серверов Майнкрафт?', 'Это сайт со списком серверов Minecraft, где видно их IP-адреса, онлайн, версию и рейтинг. Мониторинг сам проверяет сервера каждые несколько минут, поэтому данные всегда свежие.'],
+  ['Как выбрать сервер Minecraft?', 'Выберите режим (выживание, анархия, мини-игры, моды) и версию игры, затем посмотрите онлайн, аптайм и голоса игроков. Сервер с высоким аптаймом и живым онлайном почти всегда лучше пустого.'],
+  ['Как зайти на сервер?', 'Скопируйте IP-адрес в один клик и добавьте его в «Сетевую игру» Minecraft. Ещё проще — через NLauncher: он сам подберёт версию и подключится к серверу.'],
+  ['Как добавить свой сервер в мониторинг?', 'Зарегистрируйтесь, нажмите «Добавить сервер» и укажите IP-адрес. После модерации сервер появится в топе. Добавление бесплатное.'],
+  ['Как поднять сервер в топе?', 'Позиция зависит от голосов игроков за месяц. Голосовать можно раз в сутки, а награды за голос выдаются через Votifier. Также можно купить рекламу: PROMO-место, промо-баллы или выделение.'],
+];
+
 function home(req, { servers, banner, stats, q, tag, tags, news }) {
   const b = banner;
   const site = settings.get('site_name');
@@ -50,21 +58,23 @@ function home(req, { servers, banner, stats, q, tag, tags, news }) {
       itemListElement: servers.slice(0, 30).map((sv, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(serverPath(sv)), name: sv.name })),
     },
   ];
-  const h1 = tag ? `Сервера Minecraft: ${tag}` : 'Лучшие сервера Minecraft';
+  const h1 = tag ? `Сервера Minecraft: ${tag}` : 'Мониторинг серверов Майнкрафт';
+  const main = !tag && !q; // SEO-текст и вопросы — только на чистой главной
+  if (main) jsonld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: HOME_FAQ.map(([qq, a]) => ({ '@type': 'Question', name: qq, acceptedAnswer: { '@type': 'Answer', text: a } })) });
   return layout(req, {
-    title: tag ? `${h1} — IP-адреса, онлайн и рейтинг` : '',
+    title: tag ? `${h1} — IP-адреса, онлайн и рейтинг` : 'Мониторинг серверов Майнкрафт: топ серверов Minecraft',
     description: tag
       ? `Сервера Minecraft с режимом «${tag}»: IP-адреса, онлайн в реальном времени, голосование и рейтинг. ${stats.servers} серверов в мониторинге.`
-      : `Топ серверов Minecraft: ${stats.servers} серверов с IP-адресами, онлайн в реальном времени, графики и голосование. Выживание, анархия, мини-игры и моды — найдите сервер по душе.`,
+      : `Мониторинг серверов Майнкрафт (Minecraft): топ серверов с IP-адресами, онлайном в реальном времени, графиками и голосованием. Выживание, анархия, мини-игры и моды — ${stats.servers} серверов в рейтинге.`,
     canonical: tag ? `/?tag=${encodeURIComponent(tag)}` : '/',
     noindex: Boolean(q), // результаты поиска не индексируем
     jsonld,
     body: html`
     <section class="hero">
       <div class="hero-in">
-        <span class="eyebrow">Мониторинг NLauncher</span>
+        <span class="eyebrow">${tag ? 'Мониторинг серверов Майнкрафт' : 'Топ серверов Minecraft'}</span>
         <h1>${h1}</h1>
-        <p class="muted">Онлайн в реальном времени, честное голосование и быстрый вход через NLauncher.</p>
+        <p class="muted">IP-адреса, онлайн в реальном времени, честное голосование и быстрый вход через NLauncher.</p>
         <form class="hero-search" method="get" action="/">
           ${icon('search')}<input name="q" value="${q}" placeholder="Название, IP или режим…" />
           ${tag ? html`<input type="hidden" name="tag" value="${tag}" />` : ''}
@@ -103,6 +113,19 @@ function home(req, { servers, banner, stats, q, tag, tags, news }) {
     <div class="news-grid">
       ${news.map((n) => html`<article class="card news"><small>${fmt.date(n.created)}</small><b>${n.title}</b><p>${n.text}</p>${safeUrl(n.url) ? html`<a class="link" href="${safeUrl(n.url)}" target="_blank" rel="noopener">Подробнее ${icon('arrow')}</a>` : ''}</article>`)}
     </div>` : ''}
+
+    ${main ? html`
+    <section class="seo-about">
+      <div class="card pad prose-card">
+        <h2 class="h3">Мониторинг серверов Minecraft</h2>
+        <p>${site} — мониторинг серверов Майнкрафт с рейтингом, который обновляется в реальном времени. Каждые несколько минут мы проверяем каждый сервер: онлайн, пинг, версию и описание. На странице сервера — IP-адрес, графики онлайна за сутки, неделю и месяц, аптайм и отзывы игроков.</p>
+        <p>Место в топе зависит от голосов игроков за месяц, а рекламные места всегда подписаны. Ищите сервера по режиму — <a class="link" href="/servera-vyzhivanie/">выживание</a>, <a class="link" href="/servera-anarhiya/">анархия</a>, <a class="link" href="/servera-s-mini-igrami/">мини-игры</a> — или по версии, например <a class="link" href="/servera-1.21/">сервера Майнкрафт 1.21</a>. Все подборки — в <a class="link" href="/servera/">каталоге</a>.</p>
+      </div>
+      <div class="card pad">
+        <h2 class="h3">Частые вопросы</h2>
+        ${HOME_FAQ.map(([qq, a]) => html`<details class="qa"><summary>${qq}</summary><p>${a}</p></details>`)}
+      </div>
+    </section>` : ''}
     `,
   });
 }
