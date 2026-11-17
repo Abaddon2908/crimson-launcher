@@ -359,7 +359,7 @@ const LP_FAQ = [
 
 function launcher(req, { downloadUrl, portableUrl, version, size }) {
   return layout(req, {
-    title: 'Скачать лаунчер Minecraft бесплатно — NLauncher с модами, лицензией и без',
+    title: 'Скачать лаунчер Minecraft бесплатно — с модами, лицензией и без',
     description: 'Скачать NLauncher — бесплатный лаунчер Minecraft для Windows: вход с лицензией и без, любые версии, Fabric, Quilt и Forge, моды из Modrinth в один клик, топ серверов.',
     jsonld: [{
       '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'NLauncher',

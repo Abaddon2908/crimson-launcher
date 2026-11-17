@@ -83,7 +83,9 @@ fi
 say "Выпускаю SSL-сертификат Let's Encrypt"
 ALIASES="www.$DOMAIN"
 v-list-web-domain "$OWNER" "$DOMAIN" plain 2>/dev/null | grep -q "www.$DOMAIN" || ALIASES=""
-if v-add-letsencrypt-domain "$OWNER" "$DOMAIN" "$ALIASES"; then
+if v-list-web-domain "$OWNER" "$DOMAIN" shell 2>/dev/null | grep -Eq '^SSL:[[:space:]]+yes'; then
+  echo "Сертификат уже установлен — пропускаю."
+elif v-add-letsencrypt-domain "$OWNER" "$DOMAIN" "$ALIASES"; then
   echo "Сертификат выпущен."
 else
   echo
