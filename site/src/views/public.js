@@ -341,33 +341,89 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
+const LP_FEATURES = [
+  ['users', 'Лицензия и без лицензии', 'Вход через Microsoft или просто по нику. Несколько аккаунтов — переключение в один клик.'],
+  ['layers', 'Любые версии', 'От старых классических до самой свежей. Лаунчер сам скачает игру и подходящую Java.'],
+  ['puzzle', 'Моды в один клик', 'Каталог Modrinth прямо в лаунчере: поиск и установка без возни с файлами.'],
+  ['server', 'Сервера из топа', 'Лучшие сервера мониторинга на главном экране — подключение сразу, без ввода IP.'],
+  ['bolt', 'Быстрый и лёгкий', 'Минималистичный интерфейс, ничего лишнего. Память и параметры Java — в настройках.'],
+  ['shield', 'Безопасный вход', 'Пароль от Microsoft вводится на официальной странице Microsoft, лаунчер его не видит.'],
+];
+const LP_FAQ = [
+  ['NLauncher бесплатный?', 'Да, полностью. Платить нужно только за саму игру, если вы хотите играть с лицензией.'],
+  ['Можно играть без лицензии?', 'Да. Выберите вход по нику — так можно играть в одиночной игре и на серверах, которые пускают игроков без лицензии.'],
+  ['Нужно ли устанавливать Java?', 'Нет. Лаунчер сам скачает подходящую версию Java для выбранной версии Minecraft.'],
+  ['Windows пишет «Система Windows защитила ваш компьютер». Что делать?', 'Так Windows реагирует на новые программы, у которых ещё мало скачиваний. Нажмите «Подробнее» → «Выполнить в любом случае».'],
+  ['Чем отличается версия «Без установки»?', 'Это один .exe-файл, который запускается без установки, например с флешки. Возможности те же.'],
+];
+
 function launcher(req, { downloadUrl, portableUrl, version, size }) {
   return layout(req, {
-    title: 'NLauncher — лаунчер Minecraft с модами, лицензией и офлайн-входом',
+    title: 'Скачать лаунчер Minecraft бесплатно — NLauncher с модами, лицензией и без',
     description: 'Скачать NLauncher — бесплатный лаунчер Minecraft для Windows: вход с лицензией и без, любые версии, Fabric, Quilt и Forge, моды из Modrinth в один клик, топ серверов.',
     jsonld: [{
       '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'NLauncher',
       operatingSystem: 'Windows 10, Windows 11', applicationCategory: 'GameApplication',
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'RUB' },
       downloadUrl: abs(downloadUrl), ...(version ? { softwareVersion: version } : {}),
-      author: { '@type': 'Organization', name: 'NeoDev' }, image: abs('/assets/icon.png'),
+      author: { '@type': 'Organization', name: 'NeoDev' }, image: abs('/assets/icon.png'), screenshot: abs('/assets/launcher-home.jpg'),
+    }, {
+      '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: LP_FAQ.map(([qq, a]) => ({ '@type': 'Question', name: qq, acceptedAnswer: { '@type': 'Answer', text: a } })),
     }],
     body: html`
-    <section class="page-hero launcher-hero">
-      <span class="eyebrow">NeoDev</span>
-      <h1>NLauncher</h1>
-      <p class="muted">Минималистичный лаунчер Minecraft: лицензия и офлайн, любые версии, Fabric / Quilt / Forge, моды из Modrinth и сервера из этого мониторинга прямо на главном экране.</p>
-      <div class="row">
-        <a class="btn primary lg" href="${downloadUrl}">${icon('download')}Скачать для Windows</a>
-        ${portableUrl ? html`<a class="btn ghost lg" href="${portableUrl}">Портативная версия</a>` : ''}
+    <section class="lp-hero">
+      <div class="lp-copy">
+        <span class="eyebrow">Бесплатно · Windows 10 и 11</span>
+        <h1>Лаунчер Minecraft, в котором всё под рукой</h1>
+        <p class="lp-lead">Играйте с лицензией или без, на любой версии. Моды и сборки ставятся в один клик, а лучшие сервера уже ждут на главном экране.</p>
+        <div class="lp-actions">
+          <a class="btn primary lg" href="${downloadUrl}">${icon('download')}Скачать NLauncher</a>
+          ${portableUrl ? html`<a class="btn ghost lg" href="${portableUrl}">Без установки</a>` : ''}
+        </div>
+        <p class="lp-meta">${version ? `Версия ${version} · ` : ''}${size ? `${(size / 1048576).toFixed(0)} МБ · ` : ''}Windows 10/11</p>
       </div>
-      ${version ? html`<p class="muted small" style="margin-top:12px">Версия ${version}${size ? ` · ${(size / 1048576).toFixed(0)} МБ` : ''} · Windows 10/11</p>` : ''}
+      <div class="lp-shot">
+        <img src="/assets/launcher-home.jpg" width="1920" height="1200" alt="Главный экран NLauncher: выбор сборки, кнопка «Играть» и сервера из мониторинга" fetchpriority="high" />
+      </div>
     </section>
-    <div class="plans">
-      <div class="card pad"><h3>Лицензия и офлайн</h3><p class="muted">Вход через Microsoft или просто по нику.</p></div>
-      <div class="card pad"><h3>Сборки и моды</h3><p class="muted">Каталог Modrinth с автоматической установкой зависимостей.</p></div>
-      <div class="card pad"><h3>Сервера</h3><p class="muted">Топ этого мониторинга и подключение в один клик.</p></div>
-    </div>`,
+
+    <section class="lp-features">
+      ${LP_FEATURES.map(([ic, t, d]) => html`<div class="lp-feat"><span class="lp-ic">${icon(ic)}</span><h2>${t}</h2><p>${d}</p></div>`)}
+    </section>
+
+    <section class="lp-split card">
+      <div class="lp-split-text">
+        <span class="eyebrow">Сборки</span>
+        <h2>Своя сборка под каждую игру</h2>
+        <p>Отдельная папка, версия и загрузчик модов для каждой сборки: PvP-сборка на Fabric не мешает техно-сборке на Forge. Переключайтесь между ними за секунду.</p>
+        <ul class="lp-list">
+          <li>${icon('check')}Vanilla, Fabric, Quilt и Forge</li>
+          <li>${icon('check')}Моды, ресурспаки и шейдеры из Modrinth</li>
+          <li>${icon('check')}Зависимости модов ставятся сами</li>
+        </ul>
+      </div>
+      <img src="/assets/launcher-instances.jpg" width="1356" height="435" alt="Список сборок в NLauncher" loading="lazy" />
+    </section>
+
+    <section class="lp-steps">
+      <h2 class="sec">Как начать</h2>
+      <ol>
+        <li><b>Скачайте и установите</b><span>Обычный установщик, пара кликов. Java не нужна — лаунчер скачает её сам.</span></li>
+        <li><b>Войдите</b><span>Через аккаунт Microsoft, если у вас лицензия, или просто введите ник.</span></li>
+        <li><b>Играйте</b><span>Выберите версию или сервер из топа и нажмите «Играть».</span></li>
+      </ol>
+    </section>
+
+    <section class="lp-faq card pad">
+      <h2 class="h3">Частые вопросы</h2>
+      ${LP_FAQ.map(([qq, a]) => html`<details class="qa"><summary>${qq}</summary><p>${a}</p></details>`)}
+    </section>
+
+    <section class="lp-final">
+      <h2>Готовы играть?</h2>
+      <p class="muted">NLauncher бесплатный${size ? ` и весит всего ${(size / 1048576).toFixed(0)} МБ` : ''}.</p>
+      <a class="btn primary lg" href="${downloadUrl}">${icon('download')}Скачать для Windows</a>
+    </section>`,
   });
 }
 
