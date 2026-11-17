@@ -422,8 +422,27 @@ function settingsPage(req, { s, flash, hooks }) {
         </div>
         <p class="muted small">Карта сайта для вебмастеров: <code>${hooks.sitemap}</code> · robots.txt: <code>${hooks.robots}</code>. Когда включены счётчики, посетители видят уведомление о cookie.</p>
       </div>
+      <div class="card pad full" id="mail"><h3>Почта (SMTP)</h3>
+        <div class="settings-grid inner">
+          <div>
+            ${f('smtp_host', 'Сервер SMTP', 'mail.nlauncher.ru')}
+            ${f('smtp_port', 'Порт', '465', 'number')}
+            ${f('mail_from', 'Адрес отправителя', 'noreply@nlauncher.ru')}
+          </div>
+          <div>
+            ${f('smtp_user', 'Логин (обычно полный адрес ящика)', 'noreply@nlauncher.ru')}
+            <label class="field"><span>Пароль ящика</span><input class="input" type="password" name="smtp_pass" value="${s.smtp_pass || ''}" autocomplete="new-password" /></label>
+            <p class="muted small">Статус: ${s.smtp_host && (s.mail_from || s.smtp_user) ? html`<b class="ok-text">настроена</b> — письма отправляются` : html`<b>не настроена</b> — сайт работает, но писем нет`}</p>
+          </div>
+        </div>
+        <p class="muted small"><b>Hestia:</b> MAIL → добавить домен <code>nlauncher.ru</code> (DKIM включён) → добавить ящик <code>noreply</code>. Сервер <code>mail.nlauncher.ru</code>, порт 465, логин — полный адрес. Затем в DNS домена должны быть записи MX, SPF, DKIM и DMARC (Hestia создаёт их сама, если DNS ведётся в панели).<br/>
+        <b>Сервис рассылок</b> (Unisender Go, Brevo и др.): возьмите у них SMTP-сервер, порт, логин и пароль; адрес отправителя — на вашем домене. Порт 587 тоже подходит.</p>
+        <p class="muted small">Что отправляется: ссылка для восстановления пароля, «поддержка ответила», «сервер одобрен / отклонён», «реклама заканчивается через 3 дня».</p>
+        <div class="row" style="margin-top:10px"><button class="btn ghost sm" form="mailTest">${icon('send')}Отправить тестовое письмо себе</button><span class="muted small">Сначала сохраните настройки.</span></div>
+      </div>
       <div class="row end full"><button class="btn primary">Сохранить настройки</button></div>
-    </form>`, { flash });
+    </form>
+    <form id="mailTest" method="post" action="/admin/settings/test-mail" hidden>${csrfField(req)}</form>`, { flash });
 }
 
 // Стартовый список: публичные адреса известных серверов. Каждый проверяется пингом, мёртвые не добавятся.

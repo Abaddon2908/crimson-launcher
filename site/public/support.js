@@ -85,6 +85,7 @@
     busy = false;
   });
 
-  // первая проверка ответов — чуть позже загрузки страницы
-  timer = setTimeout(load, 1500);
+  // ссылка из письма «Поддержка ответила» (?support=1) сразу открывает переписку
+  if (new URLSearchParams(location.search).get('support') === '1') toggle(true);
+  else timer = setTimeout(load, 1500); // первая проверка ответов — чуть позже загрузки страницы
 })();

@@ -336,9 +336,51 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
         ${reg ? html`<label class="field"><span>Имя</span><input class="input" name="name" value="${values.name || ''}" required maxlength="40" /></label>` : ''}
         <label class="field"><span>Email</span><input class="input" type="email" name="email" value="${values.email || ''}" required /></label>
         <label class="field"><span>Пароль</span><input class="input" type="password" name="password" required minlength="${reg ? 8 : 1}" /></label>
+        ${reg ? '' : html`<p class="auth-forgot"><a class="link small" href="/forgot">Забыли пароль?</a></p>`}
         <button class="btn primary block">${reg ? 'Создать аккаунт' : 'Войти'}</button>
       </form>
       <p class="muted center">${reg ? html`Уже есть аккаунт? <a class="link" href="/login">Войти</a>` : html`Нет аккаунта? <a class="link" href="/register">Регистрация</a>`}</p>
+    </div>`,
+  });
+}
+
+function forgotPage(req, { mailOn, sent }) {
+  return layout(req, {
+    title: 'Восстановление пароля', noindex: true,
+    body: html`
+    <div class="auth card">
+      <div class="auth-cover"></div>
+      <h1>Восстановление пароля</h1>
+      ${sent ? html`<p class="muted">Если аккаунт <b>${sent}</b> существует, мы отправили на него письмо со ссылкой. Она действует 1 час. Письма нет — проверьте папку «Спам».</p>
+        <p class="muted center"><a class="link" href="/login">Вернуться ко входу</a></p>`
+      : mailOn ? html`<p class="muted">Укажите email аккаунта — пришлём ссылку для нового пароля.</p>
+        <form method="post">${csrfField(req)}
+          <label class="field"><span>Email</span><input class="input" type="email" name="email" required autofocus /></label>
+          <button class="btn primary block">Отправить ссылку</button>
+        </form>
+        <p class="muted center"><a class="link" href="/login">Вспомнили пароль? Войти</a></p>`
+      : html`<p class="muted">Восстановление по почте пока не работает. Напишите в поддержку — кнопка внизу справа: укажите email аккаунта, и мы поможем сменить пароль.</p>
+        <p class="muted center"><a class="link" href="/login">Вернуться ко входу</a></p>`}
+    </div>`,
+  });
+}
+
+function resetPage(req, { token, valid, error }) {
+  return layout(req, {
+    title: 'Новый пароль', noindex: true,
+    body: html`
+    <div class="auth card">
+      <div class="auth-cover"></div>
+      <h1>Новый пароль</h1>
+      ${valid ? html`
+        ${error ? html`<div class="err-box">${error}</div>` : ''}
+        <form method="post" action="/reset/${token}">${csrfField(req)}
+          <label class="field"><span>Новый пароль</span><input class="input" type="password" name="password" minlength="8" required autofocus /></label>
+          <label class="field"><span>Ещё раз</span><input class="input" type="password" name="password2" minlength="8" required /></label>
+          <button class="btn primary block">Сохранить и войти</button>
+        </form>`
+      : html`<p class="muted">Ссылка устарела или уже использована. Запросите новую.</p>
+        <p class="muted center"><a class="btn primary" href="/forgot">Запросить ссылку</a></p>`}
     </div>`,
   });
 }
@@ -593,4 +635,4 @@ function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
+module.exports = { forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };

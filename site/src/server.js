@@ -10,10 +10,11 @@ const auth = require('./auth');
 const pinger = require('./pinger');
 const support = require('./support');
 const notify = require('./adminNotify');
+const mailer = require('./mailer');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const { safeUrl, fmt } = require('./views/html');
-const { serverPath, slugify } = require('./seo');
+const { serverPath, slugify, abs } = require('./seo');
 const V = { pub: require('./views/public'), cab: require('./views/cabinet'), adm: require('./views/admin') };
 const stats = require('./stats');
 const votifier = require('./votifier');
@@ -412,6 +413,30 @@ app.post('/register', limiter(60 * 60_000, 10), (req, res) => {
   res.redirect(safeNext(req.body.next) === '/cabinet' ? '/cabinet/servers/new' : safeNext(req.body.next));
 });
 
+/* ---- восстановление пароля по почте ---- */
+app.get('/forgot', (req, res) => send(res, V.pub.forgotPage(req, { mailOn: mailer.enabled() })));
+app.post('/forgot', limiter(60 * 60_000, 5), async (req, res, next) => {
+  try {
+    const email = str(req.body.email, 120).toLowerCase();
+    const u = db.prepare('SELECT id, email, name, banned FROM users WHERE email = ?').get(email);
+    if (u && !u.banned && mailer.enabled()) await mailer.mails.reset(u, mailer.createReset(u.id));
+    // ответ одинаковый, есть такой email или нет, — чтобы нельзя было проверять чужие адреса
+    send(res, V.pub.forgotPage(req, { mailOn: mailer.enabled(), sent: email }));
+  } catch (e) { next(e); }
+});
+app.get('/reset/:token', (req, res) => send(res, V.pub.resetPage(req, { token: req.params.token, valid: Boolean(mailer.checkReset(req.params.token)) })));
+app.post('/reset/:token', limiter(15 * 60_000, 20), (req, res) => {
+  const r = mailer.checkReset(req.params.token);
+  if (!r) return send(res, V.pub.resetPage(req, { token: req.params.token, valid: false }), 400);
+  const pw = String(req.body.password || '');
+  if (pw.length < 8) return send(res, V.pub.resetPage(req, { token: req.params.token, valid: true, error: 'Пароль — минимум 8 символов' }), 400);
+  if (pw !== String(req.body.password2 || '')) return send(res, V.pub.resetPage(req, { token: req.params.token, valid: true, error: 'Пароли не совпадают' }), 400);
+  db.prepare('UPDATE users SET pass = ? WHERE id = ?').run(auth.hashPassword(pw), r.user_id);
+  mailer.useReset(req.params.token);
+  res.login(r.user_id);
+  res.redirect('/cabinet?f=pwreset');
+});
+
 app.post('/logout', (req, res) => { res.logout(); res.redirect('/'); });
 
 /* ======================= Кабинет ======================= */
@@ -425,7 +450,7 @@ cab.get('/', (req, res) => {
       (SELECT MAX(ends) FROM orders o WHERE o.server_id = s.id AND o.kind = 'promo' AND o.status = 'paid' AND o.ends > ?) AS promo_until
     FROM servers s WHERE owner_id = ? ORDER BY created DESC`).all(monthStart(), t, req.user.id)
     .map((s) => ({ ...s, services: activeServices(s.id) }));
-  send(res, V.cab.servers(req, { list, flash: req.query.saved ? 'Сохранено' : req.query.created ? 'Сервер отправлен на модерацию — обычно это занимает до суток.' : req.query.deleted ? 'Сервер удалён' : '' }));
+  send(res, V.cab.servers(req, { list, flash: req.query.saved ? 'Сохранено' : req.query.created ? 'Сервер отправлен на модерацию — обычно это занимает до суток.' : req.query.deleted ? 'Сервер удалён' : req.query.f === 'pwreset' ? 'Пароль изменён, вы вошли в аккаунт' : '' }));
 });
 
 function readServerForm(body) {
@@ -717,6 +742,9 @@ const flashOf = (req) => ({
   shortpw: '⚠ Пароль не изменён: нужно минимум 8 символов',
   dupcoupon: '⚠ Купон с таким кодом уже есть',
   deleted: 'Удалено', selfdel: '⚠ Себя удалить нельзя',
+  mailok: 'Тестовое письмо отправлено на ваш email — проверьте почту (и папку «Спам»)',
+  mailoff: '⚠ Сначала заполните сервер SMTP и адрес отправителя и сохраните настройки',
+  mailerr: `⚠ Письмо не отправилось: ${str(req.query.e, 200)}`,
 }[req.query.f] || '');
 const audit = (req, action, details) => logAdmin(req.user.id, action, details);
 const serverName = (id) => db.prepare('SELECT name FROM servers WHERE id = ?').get(id)?.name || `#${id}`;
@@ -847,13 +875,17 @@ function backTo(req, fallback) {
 
 adm.post('/servers/:id/approve', (req, res) => {
   const id = int(req.params.id);
+  const before = db.prepare('SELECT s.*, u.email FROM servers s LEFT JOIN users u ON u.id = s.owner_id WHERE s.id = ?').get(id);
   db.prepare(`UPDATE servers SET status = 'approved', reject_reason = '' WHERE id = ?`).run(id);
   audit(req, 'Одобрил сервер', serverName(id));
+  if (before && before.status !== 'approved' && before.email && before.owner_id !== req.user.id) mailer.mails.serverApproved(before.email, before, abs(serverPath(before)));
   res.redirect(backTo(req, '/admin/servers'));
 });
 adm.post('/servers/:id/reject', (req, res) => {
   const id = int(req.params.id);
   db.prepare(`UPDATE servers SET status = 'rejected', reject_reason = ? WHERE id = ?`).run(str(req.body.reason, 300), id);
+  const s = db.prepare('SELECT s.*, u.email FROM servers s LEFT JOIN users u ON u.id = s.owner_id WHERE s.id = ?').get(id);
+  if (s?.email && s.owner_id !== req.user.id) mailer.mails.serverRejected(s.email, s, str(req.body.reason, 300));
   audit(req, 'Отклонил сервер', `${serverName(id)}: ${str(req.body.reason, 200)}`);
   res.redirect(backTo(req, '/admin/servers'));
 });
@@ -1088,7 +1120,11 @@ adm.get('/support/:id/messages', (req, res) => {
 adm.post('/support/:id/reply', (req, res) => {
   const t = support.get(int(req.params.id));
   const text = String(req.body.text ?? '').trim().slice(0, support.MAX_TEXT);
-  if (t && text) support.adminMessage(t.id, req.user.id, text);
+  if (t && text) {
+    support.adminMessage(t.id, req.user.id, text);
+    const to = t.email || (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t.contact) ? t.contact : '');
+    if (to && !t.unread_user) mailer.mails.supportReply(to, text);
+  }
   if (req.get('accept')?.includes('application/json')) return res.json({ messages: t ? support.messages(t.id, int(req.body.after)) : [] });
   res.redirect(`/admin/support/${int(req.params.id)}`);
 });
@@ -1147,7 +1183,7 @@ adm.get('/log', (req, res) => {
 });
 
 /* ---- настройки ---- */
-const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label'];
+const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'mail_from'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
   send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));
@@ -1158,8 +1194,14 @@ adm.post('/settings', (req, res) => {
   const changed = [...SETTING_KEYS, 'show_launcher_online', 'demo_stats'].filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));
   for (const k of changed) settings.set(k, str(req.body[k], 300));
   if (changed.includes('demo_stats')) audit(req, req.body.demo_stats === '1' ? 'Включил демо-статистику (видна только админам)' : 'Выключил демо-статистику', '');
-  if (changed.length) audit(req, 'Изменил настройки', changed.map((k) => (/secret|key/.test(k) ? `${k} (скрыто)` : k)).join(', '));
+  if (changed.length) audit(req, 'Изменил настройки', changed.map((k) => (/secret|key|pass/.test(k) ? `${k} (скрыто)` : k)).join(', '));
   res.redirect('/admin/settings?f=saved');
+});
+adm.post('/settings/test-mail', async (req, res) => {
+  if (!mailer.enabled()) return res.redirect('/admin/settings?f=mailoff#mail');
+  try { await mailer.mails.test(req.user.email); res.redirect('/admin/settings?f=mailok#mail'); } catch (e) {
+    res.redirect(`/admin/settings?f=mailerr&e=${encodeURIComponent(String(e.message).slice(0, 200))}#mail`);
+  }
 });
 
 app.use('/admin', adm);
@@ -1175,6 +1217,7 @@ if (process.env.NODE_ENV !== 'test') {
   pinger.start();
   stats.start();
   require('./mcversions').start();
+  mailer.startReminders(KINDS);
   app.listen(PORT, () => console.log(`NLauncher, мониторинг: http://localhost:${PORT}`));
 }
 
