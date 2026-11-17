@@ -970,8 +970,8 @@ adm.post('/products/new', (req, res) => {
 });
 adm.post('/products/:id', (req, res) => {
   const title = str(req.body.title, 80);
-  db.prepare('UPDATE products SET title = ?, description = ?, price = ?, days = ?, slots = ?, active = ? WHERE id = ?')
-    .run(title, str(req.body.description, 300), Math.max(1, int(req.body.price)), Math.max(1, int(req.body.days)), Math.max(0, int(req.body.slots)), req.body.active ? 1 : 0, int(req.params.id));
+  db.prepare('UPDATE products SET title = ?, description = ?, label = ?, price = ?, days = ?, slots = ?, active = ? WHERE id = ?')
+    .run(title, str(req.body.description, 300), str(req.body.label, 20), Math.max(1, int(req.body.price)), Math.max(1, int(req.body.days)), Math.max(0, int(req.body.slots)), req.body.active ? 1 : 0, int(req.params.id));
   audit(req, 'Изменил тариф', `${title}: ${int(req.body.price)} ₽ / ${int(req.body.days)} дн.${req.body.active ? '' : ' (снят с продажи)'}`);
   res.redirect('/admin/products?f=saved');
 });
@@ -1055,7 +1055,7 @@ adm.get('/log', (req, res) => {
 });
 
 /* ---- настройки ---- */
-const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price'];
+const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
   send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));

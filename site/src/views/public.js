@@ -289,7 +289,8 @@ function ads(req, { products, stats }) {
       <div class="hero-stats"><div><b>${fmt.num(stats.servers)}</b><small>серверов в топе</small></div><div><b>${fmt.num(stats.players)}</b><small>игроков онлайн сейчас</small></div></div>
     </section>
     <div class="plans">
-      <div class="plan card best points-plan">
+      <div class="plan card ${settings.get('points_label') ? 'best' : ''} points-plan">
+        ${settings.get('points_label') ? html`<span class="plan-label">${settings.get('points_label')}</span>` : ''}
         <span class="plan-ic">${icon('chart')}</span>
         <h3>Промо-баллы</h3>
         <p class="muted">Поднимают сервер в общем топе: чем больше активных баллов, тем выше. Любое количество на срок от 7 дней до полугода, покупки складываются.</p>
@@ -298,7 +299,8 @@ function ads(req, { products, stats }) {
         <a class="btn primary block" href="/cabinet/buy?product=points">Рассчитать и купить</a>
       </div>
       ${products.filter((p) => p.kind !== 'points').map((p) => html`
-      <div class="plan card ${p.kind === 'promo' && p.days >= 30 ? 'best' : ''}">
+      <div class="plan card ${p.label ? 'best' : ''}">
+        ${p.label ? html`<span class="plan-label">${p.label}</span>` : ''}
         <span class="plan-ic">${icon(kindIcon[p.kind] || 'tag')}</span>
         <h3>${p.title}</h3>
         <p class="muted">${p.description}</p>

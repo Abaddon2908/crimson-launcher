@@ -226,12 +226,14 @@ function orders(req, { list, status, q, flash }) {
 function products(req, { list, flash }) {
   const opts = (sel) => Object.entries(KINDS).filter(([k]) => k !== 'points').map(([k, v]) => html`<option value="${k}" ${k === sel ? 'selected' : ''}>${v.label}</option>`);
   return shell(req, '/admin/products', 'Тарифы', html`
-    <p class="muted">Цены и сроки меняются сразу. «Мест» — сколько одновременно может крутиться (0 — без ограничений). Уже оплаченные заказы не пересчитываются.</p>
+    <datalist id="planLabels"><option value="Выгодно"></option><option value="Хит"></option><option value="Популярное"></option><option value="Новинка"></option><option value="Скидка"></option></datalist>
+    <p class="muted">Метка («Выгодно», «Хит» и любая своя) выделяет карточку на странице «Реклама»; оставьте пустой, чтобы убрать. Цены и сроки меняются сразу. «Мест» — сколько одновременно может крутиться (0 — без ограничений). Уже оплаченные заказы не пересчитываются.</p>
     <div class="cards">${list.map((p) => html`
       <form method="post" action="/admin/products/${p.id}" class="card pad product-form">${csrfField(req)}
         <div class="row between"><span class="badge ${p.kind === 'promo' || p.kind === 'ingame' ? 'gold' : 'red'}">${KINDS[p.kind]?.label || p.kind}</span><label class="check"><input type="checkbox" name="active" ${p.active ? 'checked' : ''} /> Продаётся</label></div>
         <label class="field"><span>Название</span><input class="input" name="title" value="${p.title}" required /></label>
         <label class="field"><span>Описание</span><input class="input" name="description" value="${p.description}" /></label>
+        <label class="field"><span>Метка на карточке</span><input class="input" name="label" value="${p.label || ''}" maxlength="20" placeholder="пусто — без метки" list="planLabels" /></label>
         <div class="row three">
           <label class="field"><span>Цена, ₽</span><input class="input" type="number" name="price" min="1" value="${p.price}" required /></label>
           <label class="field"><span>Дней</span><input class="input" type="number" name="days" min="1" value="${p.days}" required /></label>
@@ -385,6 +387,7 @@ function settingsPage(req, { s, flash, hooks }) {
       <div class="card pad"><h3>Голосование и промо-баллы</h3>
         ${f('vote_cooldown_hours', 'Голосовать можно раз в … часов', '24', 'number')}
         ${f('points_price', 'Цена 1 промо-балла на 7 дней, ₽', '10', 'number')}
+        ${f('points_label', 'Метка на карточке промо-баллов', 'пусто — без метки')}
         <p class="muted small">Голоса доставляются на сервера через Votifier. Имя сервиса для плагинов — домен сайта. Цена баллов на другие сроки и скидки за пакеты считаются автоматически (см. «Реклама»).</p>
       </div>
       <div class="card pad full"><h3>Статистика и онлайн</h3>

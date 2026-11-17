@@ -155,6 +155,12 @@ addColumns('servers', {
   version_max: `TEXT NOT NULL DEFAULT ''`,
 });
 addColumns('votes', { rating: 'INTEGER NOT NULL DEFAULT 5' });
+{
+  // метка тарифа («Выгодно», «Хит»…); при первом добавлении колонки ставим «Выгодно» на PROMO от 30 дней, как было раньше
+  const fresh = !db.prepare('PRAGMA table_info(products)').all().some((c) => c.name === 'label');
+  addColumns('products', { label: `TEXT NOT NULL DEFAULT ''` });
+  if (fresh) db.prepare(`UPDATE products SET label = 'Выгодно' WHERE kind = 'promo' AND days >= 30`).run();
+}
 db.exec(`
 CREATE TABLE IF NOT EXISTS coupons (
   id INTEGER PRIMARY KEY,
@@ -181,6 +187,7 @@ for (const p of DEFAULT_PRODUCTS) insP.run(...p);
 const DEFAULT_SETTINGS = {
   site_name: 'NLauncher',
   site_url: process.env.SITE_URL || 'http://localhost:3000',
+  points_label: 'Выгодно',
   yoomoney_wallet: '',
   yoomoney_secret: '',
   heleket_merchant: '',
