@@ -545,7 +545,7 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
 .chips.related { margin: 0 0 16px; }
 .chip i { font-style: normal; color: var(--dim); font-size: 12px; margin-left: 4px; }
 .chip.active i { color: rgba(255,255,255,.7); }
-.chip.dim { opacity: .5; }
+.chip.dim { color: var(--muted); background: rgba(255,255,255,.03); }
 .chip.more { color: var(--accent-2); }
 .cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
 .cat-grid .cat.wide { grid-column: 1 / -1; }
