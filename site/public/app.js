@@ -251,3 +251,25 @@ document.addEventListener('click', (e) => {
   const ta = b.parentElement.querySelector('textarea');
   navigator.clipboard.writeText(ta.value).then(() => { const t = b.lastChild.textContent; b.lastChild.textContent = 'Скопировано'; setTimeout(() => { b.lastChild.textContent = t; }, 1500); }, () => { ta.select(); });
 });
+
+// Счётчик новых событий на кнопке «Админка»: обновляется раз в минуту без перезагрузки
+(() => {
+  const badge = document.getElementById('admBadge');
+  if (!badge) return;
+  const btn = badge.closest('a');
+  const tick = async () => {
+    if (!document.hidden) {
+      try {
+        const r = await fetch('/admin/notify.json', { credentials: 'same-origin' });
+        if (r.ok) {
+          const c = await r.json();
+          badge.textContent = c.total > 99 ? '99+' : String(c.total);
+          badge.hidden = !c.total;
+          btn.title = c.text;
+        }
+      } catch { /* нет связи — попробуем позже */ }
+    }
+    setTimeout(tick, 60000);
+  };
+  setTimeout(tick, 60000);
+})();

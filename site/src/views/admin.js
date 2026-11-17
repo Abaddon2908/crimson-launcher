@@ -4,7 +4,7 @@ const { layout, icon, csrfField } = require('./layout');
 const { favicon, statusDot } = require('./public');
 const { ORDER, STATUS, PROVIDER } = require('./cabinet');
 const { KINDS } = require('../db');
-const support = require('../support');
+const notify = require('../adminNotify');
 
 const SECTIONS = [
   ['/admin', 'Обзор', 'chart'],
@@ -27,7 +27,11 @@ function shell(req, active, title, body, { flash, actions } = {}) {
     body: html`
     <div class="admin">
       <aside class="admin-nav card">
-        ${(() => { const unread = support.unreadCount(); return SECTIONS.map(([h, l, i]) => html`<a class="${active === h ? 'active' : ''}" href="${h}">${icon(i)}${l}${h === '/admin/support' && unread ? html`<span class="nav-count">${unread}</span>` : ''}</a>`); })()}
+        ${(() => {
+          const c = notify.counts();
+          const by = { '/admin/support': c.support, '/admin/servers': c.servers, '/admin/users': c.users, '/admin/orders': c.orders };
+          return SECTIONS.map(([h, l, i]) => html`<a class="${active === h ? 'active' : ''}" href="${h}">${icon(i)}${l}${by[h] ? html`<span class="nav-count">${by[h]}</span>` : ''}</a>`);
+        })()}
       </aside>
       <section class="admin-main">
         <div class="page-head"><div><span class="eyebrow">Админка</span><h1>${title}</h1></div>${actions || ''}</div>

@@ -659,9 +659,9 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
 .sup-note { align-self: center; text-align: center; font-size: 12px; color: var(--muted); padding: 4px 10px; }
 .sup-input { padding: 10px 12px 12px; display: grid; gap: 8px; box-shadow: 0 -1px 0 rgba(255,255,255,.05); }
 .sup-input .input { height: 40px; font-size: 13.5px; }
-.sup-row { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--field); }
+.sup-row { display: flex; align-items: flex-end; gap: 8px; padding: 5px 5px 5px 14px; border-radius: 16px; background: var(--field); }
 .sup-row:focus-within { background: var(--field-hover); }
-.sup-row textarea { flex: 1; min-height: 24px; max-height: 120px; padding: 6px 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); font: 500 14px/1.45 var(--font); }
+.sup-row textarea { flex: 1; min-height: 38px; max-height: 120px; padding: 9px 0; align-self: center; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); font: 500 14px/1.45 var(--font); }
 .sup-send { flex: none; width: 38px; height: 38px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; cursor: pointer; display: grid; place-items: center; transition: background .2s; }
 .sup-send:hover { background: #b14f59; }
 .sup-send .ic { width: 18px; height: 18px; }
@@ -696,3 +696,7 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 .sup-form textarea { flex: 1; resize: vertical; min-height: 46px; }
 .sup-side p { margin-top: 6px; overflow-wrap: anywhere; }
 @media (max-width: 960px) { .sup-wrap { grid-template-columns: minmax(0, 1fr); } .sup-chat { height: 70vh; } }
+/* счётчик новых событий на кнопке «Админка» */
+.adm-btn { position: relative; }
+.hdr-count { min-width: 19px; height: 19px; padding: 0 5px; margin-left: 2px; border-radius: 10px; background: var(--warn); color: #1a1214; font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; line-height: 1; }
+@media (max-width: 680px) { .adm-btn .hdr-count { position: absolute; top: -5px; right: -5px; margin: 0; box-shadow: 0 0 0 2px var(--bg); } }

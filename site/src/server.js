@@ -9,6 +9,7 @@ const { db, settings, now, DAY, KINDS, topServers, activeBanner, markPaid, month
 const auth = require('./auth');
 const pinger = require('./pinger');
 const support = require('./support');
+const notify = require('./adminNotify');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const { safeUrl, fmt } = require('./views/html');
@@ -746,6 +747,7 @@ adm.get('/', (req, res) => {
 
 /* ---- сервера ---- */
 adm.get('/servers', (req, res) => {
+  notify.markSeen('servers');
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : '';
   const q = str(req.query.q, 80);
   const list = db.prepare(`SELECT s.*, u.email AS owner_email, (SELECT COUNT(*) FROM votes v WHERE v.server_id = s.id AND v.ts >= ?) AS votes
@@ -955,6 +957,7 @@ function ordersQuery(status, q, limit = 300) {
     .all(...params, q, idq, like(q), like(q), like(q));
 }
 adm.get('/orders', (req, res) => {
+  notify.markSeen('orders');
   const status = ['pending', 'paid', 'cancelled', 'active'].includes(req.query.status) ? req.query.status : '';
   const q = str(req.query.q, 80);
   send(res, V.adm.orders(req, { list: ordersQuery(status, q), status, q, flash: flashOf(req) }));
@@ -1025,6 +1028,7 @@ adm.post('/news/:id/delete', (req, res) => { db.prepare('DELETE FROM news WHERE 
 
 /* ---- пользователи ---- */
 adm.get('/users', (req, res) => {
+  notify.markSeen('users');
   const q = str(req.query.q, 80);
   const list = db.prepare(`SELECT u.*, (SELECT COUNT(*) FROM servers s WHERE s.owner_id = u.id) AS servers,
     (SELECT COALESCE(SUM(amount), 0) FROM orders o WHERE o.user_id = u.id AND o.status = 'paid') AS spent
@@ -1059,6 +1063,8 @@ adm.post('/users/:id/delete', (req, res) => {
   audit(req, 'Удалил пользователя', `${u.email}${withServers ? ` вместе с серверами (${n})` : ''}`);
   res.redirect('/admin/users?f=deleted');
 });
+
+adm.get('/notify.json', (req, res) => { const c = notify.counts(); res.set('Cache-Control', 'no-store').json({ ...c, text: notify.describe(c) }); });
 
 /* ---- техподдержка ---- */
 adm.get('/support', (req, res) => {

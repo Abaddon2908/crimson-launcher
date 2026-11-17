@@ -3,6 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { html, raw } = require('./html');
 const { settings } = require('../db');
+const notify = require('../adminNotify');
 
 // Версия файла в ссылке (?v=хеш): после обновления сайта браузер сразу берёт новые стили и скрипты,
 // а не старые из кэша.
@@ -144,7 +145,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
       </nav>
       <div class="top-right">
         ${u ? html`
-          ${u.role === 'admin' ? html`<a class="btn ghost sm" href="/admin" title="Админка">${icon('settings')}<span class="lbl">Админка</span></a>` : ''}
+          ${u.role === 'admin' ? (() => { const c = notify.counts(); return html`<a class="btn ghost sm adm-btn" href="/admin" title="${notify.describe(c)}">${icon('settings')}<span class="lbl">Админка</span><span class="hdr-count" id="admBadge" ${c.total ? '' : 'hidden'}>${c.total > 99 ? '99+' : c.total}</span></a>`; })() : ''}
           <a class="btn ghost sm" href="/cabinet" title="Кабинет">${icon('server')}<span class="lbl">Кабинет</span></a>
           <form method="post" action="/logout" class="inline"><input type="hidden" name="_csrf" value="${req.csrf}" /><button class="btn ghost sm icon" title="Выйти">${icon('logout')}</button></form>
         ` : html`
