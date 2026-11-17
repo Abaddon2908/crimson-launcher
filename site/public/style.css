@@ -698,8 +698,7 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 @media (max-width: 960px) { .sup-wrap { grid-template-columns: minmax(0, 1fr); } .sup-chat { height: 70vh; } }
 /* счётчик новых событий на кнопке «Админка» */
 .adm-btn { position: relative; }
-.hdr-count { min-width: 19px; height: 19px; padding: 0 5px; margin-left: 2px; border-radius: 10px; background: var(--warn); color: #1a1214; font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; line-height: 1; }
-@media (max-width: 680px) { .adm-btn .hdr-count { position: absolute; top: -5px; right: -5px; margin: 0; box-shadow: 0 0 0 2px var(--bg); } }
+.hdr-count { position: absolute; top: -7px; right: -7px; min-width: 19px; height: 19px; padding: 0 5px; box-shadow: 0 0 0 2px var(--bg); border-radius: 10px; background: var(--warn); color: #1a1214; font-size: 11px; font-weight: 800; display: inline-grid; place-items: center; line-height: 1; }
 .auth-forgot { text-align: right; margin: -4px 0 12px; }
 .ok-text { color: var(--ok); }
 /* подтверждение email */
@@ -709,3 +708,12 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 .verify-note .ic { width: 20px; height: 20px; flex: none; color: var(--warn); }
 .verify-note span { flex: 1; }
 @media (max-width: 560px) { .verify-note { flex-wrap: wrap; } .verify-note .btn { width: 100%; } }
+/* шапка: без переносов строк */
+.nav a, .brand b, .brand small, .top-right .btn { white-space: nowrap; }
+@media (max-width: 1240px) { .brand small { display: none; } .nav a { padding: 8px 10px; } }
+/* планшет: меню второй строкой, как на телефоне */
+@media (max-width: 1040px) {
+  .top-in { height: auto; flex-wrap: wrap; row-gap: 6px; padding: 10px 0 8px; }
+  .nav { order: 3; width: 100%; overflow-x: auto; margin: 0 -4px; scrollbar-width: none; }
+  .nav::-webkit-scrollbar { display: none; }
+}
