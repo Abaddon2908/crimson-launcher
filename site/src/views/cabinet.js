@@ -123,10 +123,10 @@ function widgets(req, { s, base, page }) {
         `<a href="${pageUrl}" target="_blank" rel="noopener"><img src="${base}/widget/server/${s.id}.svg" width="320" height="84" alt="${s.name} — онлайн сервера" /></a>`)}
       ${block('Кнопка «Голосовать»', '', html`<img src="/widgets/vote-88x31.png" width="88" height="31" alt="" /> <img src="/widgets/vote-180x44.png" width="180" height="44" alt="" />`,
         img('vote-180x44.png', voteUrl, `Голосовать за сервер ${s.name}`, 180, 44))}
-      ${block('Кнопка «Мы на NeoDev»', '', html`<img src="/widgets/on-88x31.png" width="88" height="31" alt="" /> <img src="/widgets/on-180x44.png" width="180" height="44" alt="" />`,
-        img('on-88x31.png', pageUrl, `Сервер ${s.name} в мониторинге NeoDev`, 88, 31))}
+      ${block('Кнопка «Мы в NLauncher»', '', html`<img src="/widgets/on-88x31.png" width="88" height="31" alt="" /> <img src="/widgets/on-180x44.png" width="180" height="44" alt="" />`,
+        img('on-88x31.png', pageUrl, `Сервер ${s.name} в мониторинге NLauncher`, 88, 31))}
       ${block('Кнопка «Проверено»', '', html`<img src="/widgets/checked-88x31.png" width="88" height="31" alt="" /> <img src="/widgets/checked-180x44.png" width="180" height="44" alt="" />`,
-        img('checked-88x31.png', pageUrl, `Сервер ${s.name} проверен мониторингом NeoDev`, 88, 31))}
+        img('checked-88x31.png', pageUrl, `Сервер ${s.name} проверен мониторингом NLauncher`, 88, 31))}
       ${block('Ссылка для голосования', 'Её же используйте в VotingPlugin (VoteURL) и в сообщениях в игре.', html`<code>${voteUrl}</code>`, voteUrl)}
     </div>
     <script async src="/widgets/vote.js"></script>`);
@@ -164,9 +164,9 @@ function serverStats(req, { s, hist, totals }) {
       <div class="card-head"><h3>По дням</h3><div class="legend"><span class="l1">просмотры</span><span class="l2">копирования IP</span><span class="l3">голоса</span><span class="l4">дни с рекламой</span></div></div>
       ${svgDaily(hist)}
     </div>
-    <div class="card table-wrap" style="margin-top:18px"><table class="table compact">
-      <thead><tr><th>День</th><th>Просмотры</th><th>Копирования IP</th><th>Голоса</th><th>Реклама</th></tr></thead>
-      <tbody>${hist.slice().reverse().slice(0, 14).map((d) => html`<tr><td class="nowrap">${d.day.slice(8)}.${d.day.slice(5, 7)}</td><td>${d.views}</td><td>${d.copies}</td><td>${d.votes}</td><td>${d.ads.map((k) => html`<span class="badge gold">${KINDS[k]?.short || k}</span>`)}</td></tr>`)}</tbody>
+    <div class="card table-wrap" style="margin-top:18px"><table class="table">
+      <thead><tr><th>День</th><th class="num">Просмотры</th><th class="num">Копирования IP</th><th class="num">Голоса</th><th>Реклама</th></tr></thead>
+      <tbody>${hist.slice().reverse().slice(0, 14).map((d) => html`<tr><td class="nowrap">${d.day.slice(8)}.${d.day.slice(5, 7)}</td><td class="num">${d.views}</td><td class="num">${d.copies}</td><td class="num">${d.votes}</td><td>${d.ads.map((k) => html`<span class="badge gold">${KINDS[k]?.short || k}</span>`)}</td></tr>`)}</tbody>
     </table></div>
     <p class="muted small" style="margin-top:12px">Просмотры и копирования считаются по уникальным посетителям за день, без ботов поисковиков. Ваши собственные заходы не учитываются.</p>
     <div class="row" style="margin-top:14px"><a class="btn primary" href="/cabinet/buy?server=${s.id}">${icon('bolt')}Продвинуть сервер</a><a class="btn ghost" href="/cabinet/servers/${s.id}/widgets">Виджеты для сайта</a></div>`);

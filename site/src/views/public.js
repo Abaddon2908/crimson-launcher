@@ -44,7 +44,7 @@ function home(req, { servers, banner, stats, q, tag, tags, news }) {
       '@context': 'https://schema.org', '@type': 'WebSite', name: site, url: `${base}/`, inLanguage: 'ru',
       potentialAction: { '@type': 'SearchAction', target: { '@type': 'EntryPoint', urlTemplate: `${base}/?q={search_term_string}` }, 'query-input': 'required name=search_term_string' },
     },
-    { '@context': 'https://schema.org', '@type': 'Organization', name: 'NeoDev', url: `${base}/`, logo: `${base}/assets/icon.png` },
+    { '@context': 'https://schema.org', '@type': 'Organization', name: settings.get('site_name'), url: `${base}/`, logo: `${base}/assets/icon.png` },
     servers.length && {
       '@context': 'https://schema.org', '@type': 'ItemList', name: tag ? `Сервера Minecraft: ${tag}` : 'Топ серверов Minecraft',
       itemListElement: servers.slice(0, 30).map((sv, i) => ({ '@type': 'ListItem', position: i + 1, url: abs(serverPath(sv)), name: sv.name })),
@@ -62,7 +62,7 @@ function home(req, { servers, banner, stats, q, tag, tags, news }) {
     body: html`
     <section class="hero">
       <div class="hero-in">
-        <span class="eyebrow">Мониторинг NeoDev</span>
+        <span class="eyebrow">Мониторинг серверов Minecraft</span>
         <h1>${h1}</h1>
         <p class="muted">Онлайн в реальном времени, честное голосование и быстрый вход через NLauncher.</p>
         <form class="hero-search" method="get" action="/">
@@ -478,7 +478,7 @@ function favorites(req) {
 function votifierPage(req, { service }) {
   return layout(req, {
     title: 'Votifier: награды игрокам за голосование',
-    description: 'Как настроить Votifier (VotifierPlus, NuVotifier) и VotingPlugin, чтобы игроки получали награду за голос за ваш сервер в мониторинге NeoDev.',
+    description: 'Как настроить Votifier (VotifierPlus, NuVotifier) и VotingPlugin, чтобы игроки получали награду за голос за ваш сервер в нашем мониторинге.',
     body: html`
     <section class="page-hero"><span class="eyebrow">Для владельцев серверов</span><h1>Награды за голоса через Votifier</h1>
       <p class="muted">Игрок голосует за сервер на сайте → мы сразу сообщаем вашему серверу → плагин выдаёт награду в игре.</p></section>
@@ -495,7 +495,7 @@ function votifierPage(req, { service }) {
       <h2 class="h3">5. Награды в VotingPlugin</h2>
       <p>Название нашего сервиса для настроек плагина: <code>${service}</code>. Пример наград:</p>
       <pre class="code">VoteSites:
-  NeoDev:
+  Monitoring:
     ServiceSite: '${service}'
     VoteURL: '${siteUrl()}/vote/ВАШ_ID'
     Enabled: true

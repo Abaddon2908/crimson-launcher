@@ -179,7 +179,7 @@ const insP = db.prepare('INSERT OR IGNORE INTO products (code, kind, title, desc
 for (const p of DEFAULT_PRODUCTS) insP.run(...p);
 
 const DEFAULT_SETTINGS = {
-  site_name: 'NeoDev Мониторинг',
+  site_name: 'Мониторинг Minecraft серверов',
   site_url: process.env.SITE_URL || 'http://localhost:3000',
   yoomoney_wallet: '',
   yoomoney_secret: '',
@@ -190,6 +190,8 @@ const DEFAULT_SETTINGS = {
 };
 const insS = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) insS.run(k, v);
+// Старое название по умолчанию меняем на новое (если админ не задавал своё)
+db.prepare("UPDATE settings SET value = ? WHERE key = 'site_name' AND value = 'NeoDev Мониторинг'").run(DEFAULT_SETTINGS.site_name);
 
 const now = () => Date.now();
 const DAY = 86400000;

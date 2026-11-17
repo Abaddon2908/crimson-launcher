@@ -80,7 +80,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
   const u = req.user;
   const path = (req.baseUrl || '') + req.path; // внутри роутеров (/admin, /cabinet) req.path относительный
   const closed = noindex || PRIVATE.test(path);
-  const fullTitle = title ? `${title} — ${site}` : `${site} — топ серверов Minecraft`;
+  const fullTitle = title ? `${title} — ${site}` : `${site} — топ, IP-адреса и онлайн`;
   const desc = (description || DEFAULT_DESC).replace(/\s+/g, ' ').trim().slice(0, 300);
   const url = abs(canonical || path);
   const img = abs(image || '/assets/og-image.png');
@@ -127,7 +127,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
   <div class="bg" aria-hidden="true"><div class="bg-img"></div></div>
   <header class="top">
     <div class="wrap top-in">
-      <a href="/" class="brand"><img class="logo" src="/assets/logo-mark.svg" alt="" /><span><b>${site}</b><small>by NeoDev</small></span></a>
+      <a href="/" class="brand"><img class="logo" src="/assets/logo-mark.svg" alt="" /><span><b>${site}</b><small>топ · онлайн · голосование</small></span></a>
       <nav class="nav">
         ${nav('/', 'Топ серверов')}
         ${nav('/servera/', 'Подборки')}
@@ -152,7 +152,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
     ${body}
   </main>
   <footer class="foot wrap">
-    <span>© ${new Date().getFullYear()} NeoDev · ${site}</span>
+    <span>© ${new Date().getFullYear()} ${site} · <span class="nowrap">При поддержке <a href="https://neo-dev.ru" target="_blank" rel="noopener">NeoDev</a></span></span>
     <span class="muted">Не является официальным продуктом Minecraft. Не одобрено и не связано с Mojang или Microsoft.</span>
   </footer>
   ${metrics.enabled ? html`<div class="cookie" id="cookie" hidden><span>Мы используем cookie и сервисы веб-аналитики, чтобы сайт работал лучше. Продолжая пользоваться сайтом, вы соглашаетесь с этим.</span><button class="btn primary sm" id="cookieOk">Понятно</button></div>` : ''}

@@ -1,4 +1,4 @@
-// NeoDev Мониторинг — сервер приложения
+// Мониторинг Minecraft серверов — сервер приложения
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -288,7 +288,7 @@ async function deliverVote(server, nickname, voteId, ip = '') {
     const timestamp = now();
     const signature = crypto.createHmac('sha256', server.vote_secret).update(`${nickname}:${timestamp}`).digest('hex');
     try {
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'NeoDev-Monitoring' }, body: JSON.stringify({ server_id: server.id, nickname, timestamp, signature }), signal: AbortSignal.timeout(8000) });
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'MC-Monitoring' }, body: JSON.stringify({ server_id: server.id, nickname, timestamp, signature }), signal: AbortSignal.timeout(8000) });
       if (r.ok && voteId) db.prepare('UPDATE votes SET delivered = 1 WHERE id = ?').run(voteId);
     } catch { /* сервер недоступен — голос всё равно засчитан */ }
   }
@@ -1024,7 +1024,7 @@ auth.bootstrapAdmin();
 if (process.env.NODE_ENV !== 'test') {
   pinger.start();
   stats.start();
-  app.listen(PORT, () => console.log(`NeoDev Мониторинг: http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`Мониторинг: http://localhost:${PORT}`));
 }
 
 module.exports = app;
