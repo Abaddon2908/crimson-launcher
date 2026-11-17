@@ -6,6 +6,13 @@ const { db, settings, now } = require('./db');
 const { esc } = require('./views/html');
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS email_codes (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  expires INTEGER NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  sent_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS password_resets (
   token_hash TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -84,12 +91,46 @@ function checkReset(token) {
 }
 const useReset = (token) => db.prepare('UPDATE password_resets SET used = 1 WHERE token_hash = ?').run(hash(String(token || '')));
 
+/* ---- подтверждение email кодом ---- */
+const CODE_TTL = 15 * 60_000, RESEND_AFTER = 60_000, MAX_ATTEMPTS = 5;
+/** Через сколько секунд можно отправить код ещё раз (0 — можно сейчас) */
+function resendWait(userId) {
+  const r = db.prepare('SELECT sent_at FROM email_codes WHERE user_id = ?').get(userId);
+  return r ? Math.max(0, Math.ceil((r.sent_at + RESEND_AFTER - now()) / 1000)) : 0;
+}
+async function sendCode(user) {
+  const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+  db.prepare(`INSERT INTO email_codes (user_id, code_hash, expires, attempts, sent_at) VALUES (?, ?, ?, 0, ?)
+    ON CONFLICT(user_id) DO UPDATE SET code_hash = excluded.code_hash, expires = excluded.expires, attempts = 0, sent_at = excluded.sent_at`)
+    .run(user.id, hash(`${user.id}:${code}`), now() + CODE_TTL, now());
+  return mails.verifyCode(user, code);
+}
+/** 'ok' | 'wrong' | 'expired' | 'locked' */
+function checkCode(userId, code) {
+  const r = db.prepare('SELECT * FROM email_codes WHERE user_id = ?').get(userId);
+  if (!r || r.expires < now()) return 'expired';
+  if (r.attempts >= MAX_ATTEMPTS) return 'locked';
+  if (r.code_hash !== hash(`${userId}:${String(code || '').replace(/\D/g, '')}`)) {
+    db.prepare('UPDATE email_codes SET attempts = attempts + 1 WHERE user_id = ?').run(userId);
+    return r.attempts + 1 >= MAX_ATTEMPTS ? 'locked' : 'wrong';
+  }
+  db.prepare('DELETE FROM email_codes WHERE user_id = ?').run(userId);
+  db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(userId);
+  return 'ok';
+}
+
 /* ---- готовые письма ---- */
 const mails = {
   reset: (user, token) => send(user.email, 'Восстановление пароля', {
     title: 'Восстановление пароля',
     lines: [`Здравствуйте, ${esc(user.name || '')}! Кто-то (надеемся, вы) запросил смену пароля на сайте.`, 'Ссылка действует 1 час. Если вы ничего не запрашивали, просто проигнорируйте письмо — пароль не изменится.'],
     button: { text: 'Задать новый пароль', url: `${siteUrl()}/reset/${token}` },
+  }),
+  verifyCode: (user, code) => send(user.email, `Код подтверждения: ${code}`, {
+    title: 'Подтвердите email',
+    lines: [`Здравствуйте, ${esc(user.name || '')}! Ваш код для подтверждения почты:`,
+      `<span style="display:inline-block;font-size:30px;font-weight:800;letter-spacing:.3em;color:#eee6e7;background:#241b1e;border-radius:12px;padding:12px 18px">${code}</span>`,
+      'Код действует 15 минут. Если вы не регистрировались на сайте, просто проигнорируйте письмо.'],
   }),
   supportReply: (to, text) => send(to, 'Ответ поддержки', {
     title: 'Поддержка ответила на ваше сообщение',
@@ -133,4 +174,4 @@ function startReminders(KINDS) {
   setInterval(() => run().catch((e) => console.warn('[mail]', e.message)), 3600_000).unref();
 }
 
-module.exports = { enabled, send, mails, createReset, checkReset, useReset, startReminders };
+module.exports = { enabled, send, mails, createReset, checkReset, useReset, startReminders, sendCode, checkCode, resendWait };

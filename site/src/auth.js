@@ -57,7 +57,7 @@ function sessions(req, res, next) {
   const fresh = (uid) => ({ ...(uid ? { uid } : {}), csrf: crypto.randomBytes(18).toString('base64url'), exp: now() + MAX_AGE });
   if (!sess) { sess = fresh(); write(sess); }
   req.csrf = sess.csrf;
-  req.user = sess.uid ? db.prepare('SELECT id, email, name, role, banned FROM users WHERE id = ?').get(sess.uid) || null : null;
+  req.user = sess.uid ? db.prepare('SELECT id, email, name, role, banned, email_verified FROM users WHERE id = ?').get(sess.uid) || null : null;
   if (req.user?.banned) req.user = null;
   res.login = (uid) => write(fresh(uid));
   res.logout = () => write(fresh());
@@ -82,7 +82,7 @@ function bootstrapAdmin() {
   if (!email || !pw) return;
   const u = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
   if (u) db.prepare(`UPDATE users SET role = 'admin' WHERE id = ?`).run(u.id);
-  else db.prepare(`INSERT INTO users (email, name, pass, role, created) VALUES (?, ?, ?, 'admin', ?)`).run(email, 'Admin', hashPassword(pw), now());
+  else db.prepare(`INSERT INTO users (email, name, pass, role, email_verified, created) VALUES (?, ?, ?, 'admin', 1, ?)`).run(email, 'Admin', hashPassword(pw), now());
 }
 
 module.exports = { hashPassword, checkPassword, sessions, csrf, requireUser, requireAdmin, bootstrapAdmin };

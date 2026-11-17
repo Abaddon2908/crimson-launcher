@@ -156,6 +156,12 @@ addColumns('servers', {
 });
 addColumns('votes', { rating: 'INTEGER NOT NULL DEFAULT 5' });
 {
+  // подтверждение email: все, кто зарегистрировался до появления проверки, считаются подтверждёнными
+  const fresh = !db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'email_verified');
+  addColumns('users', { email_verified: 'INTEGER NOT NULL DEFAULT 0' });
+  if (fresh) db.exec('UPDATE users SET email_verified = 1');
+}
+{
   // метка тарифа («Выгодно», «Хит»…); при первом добавлении колонки ставим «Выгодно» на PROMO от 30 дней, как было раньше
   const fresh = !db.prepare('PRAGMA table_info(products)').all().some((c) => c.name === 'label');
   addColumns('products', { label: `TEXT NOT NULL DEFAULT ''` });

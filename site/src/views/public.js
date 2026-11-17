@@ -344,6 +344,31 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
+function verifyPage(req, { next, error, wait = 0, sent }) {
+  return layout(req, {
+    title: 'Подтверждение email', noindex: true,
+    body: html`
+    <div class="auth card">
+      <div class="auth-cover"></div>
+      <h1>Подтвердите email</h1>
+      <p class="muted">Мы отправили 6-значный код на <b>${req.user.email}</b>. Письма нет — загляните в папку «Спам».</p>
+      ${error ? html`<div class="err-box">${error}</div>` : sent ? html`<div class="ok-box">Новый код отправлен</div>` : ''}
+      <form method="post" action="/verify">${csrfField(req)}
+        <input type="hidden" name="next" value="${next}" />
+        <label class="field"><span>Код из письма</span><input class="input code-input" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" placeholder="000000" required autofocus /></label>
+        <button class="btn primary block">Подтвердить</button>
+      </form>
+      <form method="post" action="/verify/resend" class="center" style="margin-top:12px">${csrfField(req)}
+        <input type="hidden" name="next" value="${next}" />
+        <button class="btn ghost sm" id="resendBtn" data-wait="${wait}" ${wait ? 'disabled' : ''}>${wait ? `Отправить ещё раз через ${wait} с` : 'Отправить код ещё раз'}</button>
+      </form>
+      <p class="muted center small">Не приходит код? Напишите в поддержку — кнопка внизу справа. А пока можно <a class="link" href="/">смотреть сайт</a>: подтверждение нужно, чтобы добавлять сервера и покупать рекламу.</p>
+    </div>
+    <script>(() => { const b = document.getElementById('resendBtn'); let w = Number(b.dataset.wait) || 0; if (!w) return;
+      const t = setInterval(() => { w -= 1; if (w <= 0) { clearInterval(t); b.disabled = false; b.textContent = 'Отправить код ещё раз'; } else b.textContent = 'Отправить ещё раз через ' + w + ' с'; }, 1000); })();</script>`,
+  });
+}
+
 function forgotPage(req, { mailOn, sent }) {
   return layout(req, {
     title: 'Восстановление пароля', noindex: true,
@@ -635,4 +660,4 @@ function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
+module.exports = { verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };

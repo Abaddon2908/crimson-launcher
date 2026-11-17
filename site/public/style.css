@@ -702,3 +702,10 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 @media (max-width: 680px) { .adm-btn .hdr-count { position: absolute; top: -5px; right: -5px; margin: 0; box-shadow: 0 0 0 2px var(--bg); } }
 .auth-forgot { text-align: right; margin: -4px 0 12px; }
 .ok-text { color: var(--ok); }
+/* подтверждение email */
+.code-input { font: 700 24px/1 'JetBrains Mono', Consolas, monospace; letter-spacing: .4em; text-align: center; height: 56px; }
+.ok-box { padding: 10px 14px; border-radius: 12px; background: rgba(111,191,142,.12); color: var(--ok); font-size: 14px; margin-bottom: 14px; }
+.verify-note { display: flex; align-items: center; gap: 12px; padding: 14px 16px; margin-bottom: 18px; border-radius: 14px; background: rgba(214,167,100,.1); color: #e6cfa6; font-size: 14px; }
+.verify-note .ic { width: 20px; height: 20px; flex: none; color: var(--warn); }
+.verify-note span { flex: 1; }
+@media (max-width: 560px) { .verify-note { flex-wrap: wrap; } .verify-note .btn { width: 100%; } }

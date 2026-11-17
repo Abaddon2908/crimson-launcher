@@ -17,7 +17,7 @@ function tabs(req, active) {
 function shell(req, active, title, body, flash) {
   return layout(req, {
     title, flash,
-    body: html`<div class="page-head"><div><span class="eyebrow">Кабинет</span><h1>${title}</h1></div>${active === '/cabinet' ? html`<a class="btn primary" href="/cabinet/servers/new">${icon('plus')}Добавить сервер</a>` : ''}</div>${tabs(req, active)}${body}`,
+    body: html`${req.needVerify ? html`<div class="verify-note">${icon('send')}<span><b>Подтвердите email ${req.user.email}</b> — без этого нельзя добавлять сервера и покупать рекламу.</span><a class="btn primary sm" href="/verify?next=/cabinet">Ввести код</a></div>` : ''}<div class="page-head"><div><span class="eyebrow">Кабинет</span><h1>${title}</h1></div>${active === '/cabinet' ? html`<a class="btn primary" href="/cabinet/servers/new">${icon('plus')}Добавить сервер</a>` : ''}</div>${tabs(req, active)}${body}`,
   });
 }
 

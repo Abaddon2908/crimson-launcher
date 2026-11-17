@@ -281,11 +281,12 @@ function users(req, { list, q, flash }) {
     <div class="card table-wrap"><table class="table">
       <thead><tr><th>#</th><th>Имя</th><th>Email</th><th>Серверов</th><th>Потратил</th><th>Регистрация</th><th></th></tr></thead>
       <tbody>${list.map((u) => html`<tr>
-        <td class="muted">${u.id}</td><td class="nowrap"><div class="badges">${u.name}${u.role === 'admin' ? html`<span class="badge red">админ</span>` : ''}${u.banned ? html`<span class="badge bad">бан</span>` : ''}${u.id === req.user.id ? html`<span class="badge">это вы</span>` : ''}</div></td>
+        <td class="muted">${u.id}</td><td class="nowrap"><div class="badges">${u.name}${u.role === 'admin' ? html`<span class="badge red">админ</span>` : ''}${u.banned ? html`<span class="badge bad">бан</span>` : ''}${u.email_verified ? '' : html`<span class="badge warn" title="Email не подтверждён">не подтв.</span>`}${u.id === req.user.id ? html`<span class="badge">это вы</span>` : ''}</div></td>
         <td class="small">${u.email}</td><td>${u.servers ? html`<a class="link" href="/admin/servers?q=${encodeURIComponent(u.email)}">${u.servers}</a>` : 0}</td><td class="nowrap">${fmt.rub(u.spent)}</td><td class="small muted nowrap">${fmt.date(u.created)}</td>
         <td class="right nowrap">${btnPrompt(req, `/admin/users/${u.id}/password`, 'Новый пароль', 'password', `Новый пароль для ${u.email} (минимум 8 символов):`)}${u.id !== req.user.id ? html`
           ${btnPost(req, `/admin/users/${u.id}/role`, u.role === 'admin' ? 'Снять админа' : 'Сделать админом', 'ghost', '', 'Изменить роль?')}
           ${btnPost(req, `/admin/users/${u.id}/ban`, u.banned ? 'Разбанить' : 'Забанить', 'ghost danger', '', u.banned ? 'Разбанить?' : 'Забанить пользователя? Он не сможет войти.')}
+          ${u.email_verified ? '' : btnPost(req, `/admin/users/${u.id}/verify`, 'Подтвердить email', 'ghost', '', `Отметить email ${u.email} как подтверждённый?`)}
           ${btnPost(req, `/admin/users/${u.id}/delete`, html`${icon('trash')}Удалить`, 'ghost danger', '', `Удалить ${u.email} навсегда?${u.servers ? ` Его сервера (${u.servers}) останутся без владельца — их можно передать другому.` : ''}`)}
           ${u.servers ? btnPost(req, `/admin/users/${u.id}/delete`, 'Удалить с серверами', 'ghost danger', html`<input type="hidden" name="servers" value="1" />`, `Удалить ${u.email} и все его сервера (${u.servers}) вместе с голосами и статистикой? Это нельзя отменить.`) : ''}` : ''}</td>
       </tr>`)}</tbody></table>

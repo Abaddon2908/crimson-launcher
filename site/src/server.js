@@ -408,9 +408,36 @@ app.post('/register', limiter(60 * 60_000, 10), (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail('Некорректный email');
   if (pw.length < 8) return fail('Пароль — минимум 8 символов');
   if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return fail('Этот email уже зарегистрирован');
-  const r = db.prepare('INSERT INTO users (email, name, pass, created) VALUES (?, ?, ?, ?)').run(email, name, auth.hashPassword(pw), now());
-  res.login(Number(r.lastInsertRowid));
-  res.redirect(safeNext(req.body.next) === '/cabinet' ? '/cabinet/servers/new' : safeNext(req.body.next));
+  const verifyOn = mailer.enabled();
+  const r = db.prepare('INSERT INTO users (email, name, pass, email_verified, created) VALUES (?, ?, ?, ?, ?)').run(email, name, auth.hashPassword(pw), verifyOn ? 0 : 1, now());
+  const id = Number(r.lastInsertRowid);
+  res.login(id);
+  const after = safeNext(req.body.next) === '/cabinet' ? '/cabinet/servers/new' : safeNext(req.body.next);
+  if (!verifyOn) return res.redirect(after);
+  mailer.sendCode({ id, email, name }); // не ждём: страница с кодом откроется сразу
+  res.redirect(`/verify?next=${encodeURIComponent(after)}`);
+});
+
+/* ---- подтверждение email ---- */
+const needVerify = (u) => Boolean(u && !u.email_verified && u.role !== 'admin' && mailer.enabled());
+app.get('/verify', auth.requireUser, (req, res) => {
+  const next = safeNext(req.query.next);
+  if (!needVerify(req.user)) return res.redirect(next);
+  send(res, V.pub.verifyPage(req, { next, wait: mailer.resendWait(req.user.id), sent: req.query.sent === '1' }));
+});
+app.post('/verify', auth.requireUser, limiter(15 * 60_000, 30), (req, res) => {
+  const next = safeNext(req.body.next);
+  if (!needVerify(req.user)) return res.redirect(next);
+  const r = mailer.checkCode(req.user.id, req.body.code);
+  if (r === 'ok') return res.redirect(`${next}${next.includes('?') ? '&' : '?'}verified=1`);
+  const error = { wrong: 'Неверный код — проверьте цифры', expired: 'Код устарел — отправьте новый', locked: 'Слишком много попыток — отправьте новый код' }[r];
+  send(res, V.pub.verifyPage(req, { next, error, wait: mailer.resendWait(req.user.id) }), 400);
+});
+app.post('/verify/resend', auth.requireUser, limiter(60 * 60_000, 10), async (req, res) => {
+  const next = safeNext(req.body.next);
+  if (!needVerify(req.user)) return res.redirect(next);
+  if (mailer.resendWait(req.user.id) === 0) await mailer.sendCode(req.user);
+  res.redirect(`/verify?sent=1&next=${encodeURIComponent(next)}`);
 });
 
 /* ---- восстановление пароля по почте ---- */
@@ -442,6 +469,7 @@ app.post('/logout', (req, res) => { res.logout(); res.redirect('/'); });
 /* ======================= Кабинет ======================= */
 const cab = express.Router();
 cab.use(auth.requireUser);
+cab.use((req, res, next) => { req.needVerify = needVerify(req.user); next(); }); // плашка «Подтвердите email»
 
 cab.get('/', (req, res) => {
   const t = now();
@@ -481,6 +509,9 @@ function validateServer(d, selfId = 0) {
 }
 const SERVER_COLS = ['name', 'address', 'version', 'version_min', 'version_max', 'tags', 'description', 'website', 'discord', 'banner', 'vote_webhook', 'votifier_host', 'votifier_port', 'votifier_key', 'votifier_token'];
 
+// без подтверждённой почты нельзя добавлять сервера и покупать
+const requireVerified = (req, res, next) => (needVerify(req.user) ? res.redirect(`/verify?next=${encodeURIComponent(req.originalUrl)}`) : next());
+cab.use(['/servers/new', '/buy', '/pay'], requireVerified);
 cab.get('/servers/new', (req, res) => send(res, V.cab.serverForm(req, { isNew: true })));
 cab.post('/servers/new', limiter(60 * 60_000, 10), (req, res) => {
   const d = readServerForm(req.body);
@@ -1085,6 +1116,12 @@ adm.post('/users/:id/password', (req, res) => {
   res.redirect(`/admin/users?f=${pw.length >= 8 ? 'saved' : 'shortpw'}`);
 });
 
+adm.post('/users/:id/verify', (req, res) => {
+  const id = int(req.params.id);
+  db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(id);
+  audit(req, 'Подтвердил email вручную', userEmail(id));
+  res.redirect(backTo(req, '/admin/users?f=ok'));
+});
 adm.post('/users/:id/delete', (req, res) => {
   const id = int(req.params.id);
   const u = db.prepare('SELECT id, email, role FROM users WHERE id = ?').get(id);
