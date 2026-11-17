@@ -717,3 +717,18 @@ a.sup-item.unread .sup-main small { color: var(--text); }
   .nav { order: 3; width: 100%; overflow-x: auto; margin: 0 -4px; scrollbar-width: none; }
   .nav::-webkit-scrollbar { display: none; }
 }
+/* админка: NLauncher прямо сейчас */
+.l-live { margin-bottom: 18px; }
+.l-live h3 { display: flex; align-items: center; gap: 8px; }
+.l-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 24px; margin-top: 8px; }
+.l-grid b { display: block; font: 600 22px var(--display); }
+.l-grid small { color: var(--muted); font-size: 12.5px; }
+.l-big b { font-size: 34px; color: var(--accent-2); }
+.l-big.ok b { color: var(--ok); }
+.l-chart { margin-top: 18px; }
+.l-spark { width: 100%; height: 70px; display: block; }
+.l-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; margin-top: 6px; color: var(--muted); }
+.l-legend .l1::before, .l-legend .l2::before { content: ''; display: inline-block; width: 10px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: #c4747c; }
+.l-legend .l2::before { background: var(--ok); }
+.l-foot { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; padding-top: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); font-size: 13.5px; color: #cfc4c6; }
+@media (max-width: 860px) { .l-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

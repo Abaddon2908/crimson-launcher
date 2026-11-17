@@ -61,6 +61,11 @@ app.disable('x-powered-by');
 app.use(compression()); // gzip: страницы и стили грузятся в 3–5 раз быстрее
 app.set('trust proxy', process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY : false);
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '7d' }));
+// считаем скачивания установщика (одно на IP в день)
+app.use('/downloads', (req, res, next) => {
+  if (req.method === 'GET' && /\.(exe|msi|zip)$/i.test(req.path)) stats.trackDownload(req.ip, req.get('user-agent'), req.get('range'));
+  next();
+});
 app.use('/downloads', express.static(DOWNLOADS, { maxAge: '1h', dotfiles: 'deny', setHeaders: (res) => res.set('Content-Disposition', 'attachment') }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 app.use(express.json({ limit: '64kb' }));
@@ -791,6 +796,7 @@ adm.get('/', (req, res) => {
   });
   const st = siteStats();
   send(res, V.adm.dashboard(req, {
+    launcher: stats.adminSummary(),
     revenueMonth: sum(monthStart()), revenueTotal: sum(0), revenueDays,
     paidOrders: db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE status = 'paid'`).get().n,
     pendingOrders: db.prepare(`SELECT COUNT(*) AS n FROM orders WHERE status = 'pending'`).get().n,
@@ -1133,6 +1139,7 @@ adm.post('/users/:id/delete', (req, res) => {
   res.redirect('/admin/users?f=deleted');
 });
 
+adm.get('/launcher-live.json', (req, res) => res.set('Cache-Control', 'no-store').json(stats.adminSummary()));
 adm.get('/notify.json', (req, res) => { const c = notify.counts(); res.set('Cache-Control', 'no-store').json({ ...c, text: notify.describe(c) }); });
 
 /* ---- техподдержка ---- */

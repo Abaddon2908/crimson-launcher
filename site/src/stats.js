@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS stats_snapshots (
   servers INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS stats_snapshots_ts ON stats_snapshots(ts);
+CREATE TABLE IF NOT EXISTS download_daily (day TEXT PRIMARY KEY, count INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS download_day_ips (day TEXT NOT NULL, ip TEXT NOT NULL, PRIMARY KEY (day, ip));
 `);
 
 const ONLINE_WINDOW = 5 * 60 * 1000; // лаунчер считается онлайн 5 минут после последнего сигнала
@@ -82,6 +84,33 @@ function snapshot() {
   db.prepare('DELETE FROM stats_snapshots WHERE ts < ?').run(now() - 35 * DAY);
   db.prepare('DELETE FROM launcher_day_clients WHERE day < ?').run(dayKey(now() - 35 * DAY));
   db.prepare('DELETE FROM launcher_clients WHERE last_seen < ?').run(now() - 90 * DAY);
+}
+
+/** Скачивание установщика: одно на IP в день, без ботов и докачек */
+const BOT_RE = /bot|crawl|spider|slurp|curl|wget|python|headless|preview|monitor/i;
+function trackDownload(ip, ua, range) {
+  if (!ua || BOT_RE.test(ua)) return;
+  if (range && !/^bytes=0-/.test(range)) return; // докачка куска — не новое скачивание
+  const day = dayKey();
+  if (db.prepare('INSERT OR IGNORE INTO download_day_ips (day, ip) VALUES (?, ?)').run(day, hashId(`ip:${ip}`)).changes === 0) return;
+  db.prepare('INSERT INTO download_daily (day, count) VALUES (?, 1) ON CONFLICT(day) DO UPDATE SET count = count + 1').run(day);
+}
+
+/** Для админки: всегда настоящие цифры, независимо от настроек показа на сайте */
+function adminSummary() {
+  const s = summary();
+  const sumDl = (days) => db.prepare('SELECT COALESCE(SUM(count), 0) AS n FROM download_daily WHERE day >= ?').get(dayKey(now() - (days - 1) * DAY)).n;
+  const t = now();
+  return {
+    online: s.launcher.online, inGame: s.launcher.inGame,
+    today: s.launcher.today, week: s.launcher.week, month: s.launcher.month,
+    peakInGameToday: Math.max(db.prepare('SELECT peak_ingame FROM launcher_daily WHERE day = ?').get(dayKey())?.peak_ingame || 0, s.launcher.inGame),
+    installs: db.prepare('SELECT COUNT(*) AS n FROM launcher_clients').get().n,
+    installsNewWeek: db.prepare('SELECT COUNT(*) AS n FROM (SELECT id, MIN(day) d FROM launcher_day_clients GROUP BY id) WHERE d >= ?').get(dayKey(t - 6 * DAY)).n,
+    versions: db.prepare('SELECT version, COUNT(*) AS n FROM launcher_clients WHERE last_seen > ? GROUP BY version ORDER BY n DESC LIMIT 6').all(t - 30 * DAY),
+    downloads: { today: sumDl(1), week: sumDl(7), month: sumDl(30), total: db.prepare('SELECT COALESCE(SUM(count), 0) AS n FROM download_daily').get().n },
+    day: db.prepare('SELECT ts, launcher, in_game FROM stats_snapshots WHERE ts >= ? ORDER BY ts').all(t - DAY),
+  };
 }
 
 function start() {
@@ -153,4 +182,4 @@ function demoHistory() {
 
 const demoAllowed = (req) => settings.get('demo_stats') === '1' && req.user?.role === 'admin';
 
-module.exports = { ping, start, snapshot, summary, history, demoSummary, demoHistory, demoAllowed, dayKey };
+module.exports = { ping, start, snapshot, summary, history, demoSummary, demoHistory, demoAllowed, dayKey, trackDownload, adminSummary };

@@ -1,4 +1,4 @@
-const { html, fmt } = require('./html');
+const { html, fmt, raw } = require('./html');
 const { serverPath } = require('../seo');
 const { layout, icon, csrfField } = require('./layout');
 const { favicon, statusDot } = require('./public');
@@ -59,7 +59,38 @@ const kindBadges = (services) => Object.entries(services || {}).map(([k, ends]) 
 
 function dashboard(req, d) {
   const max = Math.max(1, ...d.revenueDays.map((x) => x.v));
+  const L = d.launcher;
+  // мини-график за сутки: открытые лаунчеры и играющие
+  const spark = (() => {
+    const pts = L.day; if (pts.length < 2) return '';
+    const W = 600, H = 70, t0 = pts[0].ts, t1 = pts[pts.length - 1].ts || t0 + 1, m = Math.max(1, ...pts.map((p) => p.launcher));
+    const line = (k) => pts.map((p) => `${(((p.ts - t0) / (t1 - t0 || 1)) * W).toFixed(1)},${(H - 4 - (p[k] / m) * (H - 10)).toFixed(1)}`).join(' ');
+    return raw(`<svg class="l-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><polyline points="${line('launcher')}" fill="none" stroke="#c4747c" stroke-width="2" vector-effect="non-scaling-stroke"/><polyline points="${line('in_game')}" fill="none" stroke="#6fbf8e" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>`);
+  })();
   return shell(req, '/admin', 'Обзор', html`
+    <div class="card pad l-live" id="lLive">
+      <div class="card-head"><h3><span class="dot ok pulse"></span> NLauncher прямо сейчас</h3><small class="muted">обновляется каждые 30 секунд</small></div>
+      <div class="l-grid">
+        <div class="l-big"><b data-l="online">${fmt.num(L.online)}</b><small>лаунчеров открыто</small></div>
+        <div class="l-big ok"><b data-l="inGame">${fmt.num(L.inGame)}</b><small>играют через NLauncher</small></div>
+        <div><b data-l="today.uniques">${fmt.num(L.today.uniques)}</b><small>игроков сегодня</small></div>
+        <div><b data-l="today.launches">${fmt.num(L.today.launches)}</b><small>запусков игры сегодня</small></div>
+        <div><b data-l="peakInGameToday">${fmt.num(L.peakInGameToday)}</b><small>пик в игре сегодня</small></div>
+        <div><b data-l="week">${fmt.num(L.week)}</b><small>игроков за 7 дней</small></div>
+        <div><b data-l="month">${fmt.num(L.month)}</b><small>за 30 дней</small></div>
+        <div><b data-l="installs">${fmt.num(L.installs)}</b><small>установок (активны за 90 дней)</small></div>
+      </div>
+      ${spark ? html`<div class="l-chart">${spark}<div class="l-legend"><span class="l1">открыт лаунчер</span><span class="l2">в игре</span><span class="muted">последние 24 часа</span></div></div>` : ''}
+      <div class="l-foot">
+        <span>Скачиваний установщика: сегодня <b data-l="downloads.today">${fmt.num(L.downloads.today)}</b> · за неделю <b data-l="downloads.week">${fmt.num(L.downloads.week)}</b> · за месяц <b data-l="downloads.month">${fmt.num(L.downloads.month)}</b> · всего <b data-l="downloads.total">${fmt.num(L.downloads.total)}</b></span>
+        ${L.versions.length ? html`<span>Версии: ${L.versions.map((v, i) => html`${i ? ' · ' : ''}<b>${v.version || '?'}</b> ${fmt.num(v.n)}`)}</span>` : ''}
+        <span class="muted">Новых установок за неделю: ${fmt.num(L.installsNewWeek)}. Считаются только лаунчеры с включённой «Анонимной статистикой» (по умолчанию включена).</span>
+      </div>
+    </div>
+    <script>(() => { const box = document.getElementById('lLive'); const f = new Intl.NumberFormat('ru-RU');
+      const tick = async () => { try { const r = await fetch('/admin/launcher-live.json', { credentials: 'same-origin' }); if (r.ok) { const d = await r.json();
+        box.querySelectorAll('[data-l]').forEach((el) => { const v = el.dataset.l.split('.').reduce((o, k) => o?.[k], d); if (typeof v === 'number') el.textContent = f.format(v); }); } } catch {}
+        setTimeout(tick, 30000); }; setTimeout(tick, 30000); })();</script>
     <div class="stats four">
       <div class="stat card"><small>Выручка за месяц</small><b>${fmt.rub(d.revenueMonth)}</b><small class="muted">всего ${fmt.rub(d.revenueTotal)}</small></div>
       <div class="stat card"><small>Оплаченных заказов</small><b>${fmt.num(d.paidOrders)}</b><small class="muted">ожидают оплаты: ${d.pendingOrders}</small></div>
