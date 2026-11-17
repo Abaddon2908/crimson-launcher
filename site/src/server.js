@@ -1024,6 +1024,7 @@ auth.bootstrapAdmin();
 if (process.env.NODE_ENV !== 'test') {
   pinger.start();
   stats.start();
+  require('./mcversions').start();
   app.listen(PORT, () => console.log(`NLauncher, мониторинг: http://localhost:${PORT}`));
 }
 
