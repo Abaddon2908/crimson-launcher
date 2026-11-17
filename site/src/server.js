@@ -1,4 +1,4 @@
-// Мониторинг Minecraft серверов — сервер приложения
+// NLauncher — мониторинг серверов Minecraft, сервер приложения
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -1024,7 +1024,7 @@ auth.bootstrapAdmin();
 if (process.env.NODE_ENV !== 'test') {
   pinger.start();
   stats.start();
-  app.listen(PORT, () => console.log(`Мониторинг: http://localhost:${PORT}`));
+  app.listen(PORT, () => console.log(`NLauncher, мониторинг: http://localhost:${PORT}`));
 }
 
 module.exports = app;

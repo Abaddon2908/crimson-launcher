@@ -62,7 +62,7 @@ function home(req, { servers, banner, stats, q, tag, tags, news }) {
     body: html`
     <section class="hero">
       <div class="hero-in">
-        <span class="eyebrow">Мониторинг серверов Minecraft</span>
+        <span class="eyebrow">Мониторинг NLauncher</span>
         <h1>${h1}</h1>
         <p class="muted">Онлайн в реальном времени, честное голосование и быстрый вход через NLauncher.</p>
         <form class="hero-search" method="get" action="/">

@@ -1,4 +1,4 @@
-# Мониторинг Minecraft серверов
+# NLauncher — мониторинг серверов Minecraft
 
 Сайт работает при поддержке [NeoDev](https://neo-dev.ru).
 
