@@ -630,3 +630,69 @@ input[type=checkbox]:checked::after, input[type=radio]:checked::after { opacity:
 .lp-copy h1, .lp-split h2, .lp-final h2 { font-family: var(--display); font-weight: 600; }
 .lp-copy h1 { font-size: clamp(28px, 3.6vw, 44px); }
 .lp-split h2 { font-size: 22px; }
+/* ---- техподдержка: виджет ---- */
+.sup-widget { position: fixed; right: 20px; bottom: 20px; z-index: 160; display: flex; flex-direction: column-reverse; align-items: flex-end; gap: 12px; }
+.sup-fab { position: relative; display: inline-flex; align-items: center; gap: 9px; height: 48px; padding: 0 18px 0 15px; border: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(135deg, #b14f59, var(--accent)); color: #fff; font: 700 14px var(--font); box-shadow: 0 14px 34px -12px var(--accent-glow), 0 6px 18px -8px rgba(0,0,0,.7); transition: transform .25s var(--ease), box-shadow .25s; }
+.sup-fab:hover { transform: translateY(-2px); }
+.sup-fab .ic { width: 20px; height: 20px; }
+.sup-widget.open .sup-fab { background: var(--panel-solid); box-shadow: 0 10px 30px -14px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.06); }
+.sup-dot { position: absolute; top: 6px; right: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px #b14f59; }
+.sup-panel { width: min(370px, calc(100vw - 24px)); height: min(540px, calc(100vh - 110px)); display: flex; flex-direction: column; overflow: hidden; border-radius: 20px;
+  background: rgba(22, 17, 19, .96); backdrop-filter: blur(24px); box-shadow: 0 30px 70px -20px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.06); animation: supIn .25s var(--ease); }
+@keyframes supIn { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+.sup-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 16px; background: linear-gradient(135deg, rgba(163,69,79,.22), rgba(163,69,79,.04)); }
+.sup-head .logo { width: 34px; height: 34px; }
+.sup-head div { flex: 1; min-width: 0; }
+.sup-head b { display: block; font-size: 14.5px; }
+.sup-head small { color: var(--muted); font-size: 12px; }
+.sup-x { width: 32px; height: 32px; border: 0; border-radius: 10px; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.sup-x:hover { color: var(--text); }
+.sup-x .ic { width: 18px; height: 18px; }
+.sup-body { flex: 1; overflow-y: auto; padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; overscroll-behavior: contain; }
+.sup-msg { max-width: 85%; align-self: flex-start; }
+.sup-msg p { padding: 10px 13px; border-radius: 16px 16px 16px 6px; background: rgba(255,255,255,.06); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sup-msg small { display: block; margin: 4px 6px 0; font-size: 11px; color: var(--dim); }
+.sup-msg.me { align-self: flex-end; }
+.sup-msg.me p { background: var(--accent); color: #fff; border-radius: 16px 16px 6px 16px; }
+.sup-msg.me small { text-align: right; }
+.sup-note { align-self: center; text-align: center; font-size: 12px; color: var(--muted); padding: 4px 10px; }
+.sup-input { padding: 10px 12px 12px; display: grid; gap: 8px; box-shadow: 0 -1px 0 rgba(255,255,255,.05); }
+.sup-input .input { height: 40px; font-size: 13.5px; }
+.sup-row { display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 16px; background: var(--field); }
+.sup-row:focus-within { background: var(--field-hover); }
+.sup-row textarea { flex: 1; min-height: 24px; max-height: 120px; padding: 6px 0; border: 0; outline: 0; resize: none; background: transparent; color: var(--text); font: 500 14px/1.45 var(--font); }
+.sup-send { flex: none; width: 38px; height: 38px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; cursor: pointer; display: grid; place-items: center; transition: background .2s; }
+.sup-send:hover { background: #b14f59; }
+.sup-send .ic { width: 18px; height: 18px; }
+.sup-err { color: var(--bad); font-size: 12.5px; }
+.cookie:not([hidden]) ~ .sup-widget { bottom: 96px; }
+@media (max-width: 560px) {
+  .sup-widget { right: 12px; bottom: 12px; }
+  .sup-fab { width: 52px; height: 52px; padding: 0; justify-content: center; }
+  .sup-fab span { display: none; }
+  .sup-widget.open .sup-fab { display: none; }
+  .sup-panel { position: fixed; inset: 0; width: auto; height: auto; border-radius: 0; background: var(--panel-solid); padding-bottom: env(safe-area-inset-bottom); }
+  body:has(.sup-widget.open) { overflow: hidden; }
+}
+/* ---- техподдержка: админка ---- */
+.nav-count { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--warn); color: #1a1214; font-size: 11.5px; font-weight: 800; display: inline-grid; place-items: center; }
+.admin-nav a.active .nav-count { background: #fff; color: var(--accent); }
+.sup-list { padding: 6px; }
+
+a.sup-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; color: inherit; }
+a.sup-item + a.sup-item { box-shadow: inset 0 1px 0 rgba(255,255,255,.04); }
+a.sup-item:hover .sup-main b { color: var(--accent-2); }
+a.sup-item.unread .sup-main small { color: var(--text); }
+.sup-ava { flex: none; width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-2); font-weight: 800; }
+.sup-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sup-main b { display: flex; align-items: center; gap: 8px; font-size: 14.5px; }
+.sup-main small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sup-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+.sup-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; align-items: start; }
+.sup-chat { display: flex; flex-direction: column; height: min(680px, calc(100vh - 220px)); overflow: hidden; }
+.sup-msgs { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.sup-form { display: flex; gap: 10px; align-items: flex-end; padding: 12px; box-shadow: 0 -1px 0 rgba(255,255,255,.05); }
+.sup-form textarea { flex: 1; resize: vertical; min-height: 46px; }
+.sup-side p { margin-top: 6px; overflow-wrap: anywhere; }
+@media (max-width: 960px) { .sup-wrap { grid-template-columns: minmax(0, 1fr); } .sup-chat { height: 70vh; } }

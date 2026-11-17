@@ -4,6 +4,7 @@ const { layout, icon, csrfField } = require('./layout');
 const { favicon, statusDot } = require('./public');
 const { ORDER, STATUS, PROVIDER } = require('./cabinet');
 const { KINDS } = require('../db');
+const support = require('../support');
 
 const SECTIONS = [
   ['/admin', 'Обзор', 'chart'],
@@ -12,6 +13,7 @@ const SECTIONS = [
   ['/admin/orders', 'Заказы', 'card'],
   ['/admin/products', 'Тарифы', 'tag'],
   ['/admin/coupons', 'Купоны', 'card'],
+  ['/admin/support', 'Поддержка', 'chat'],
   ['/admin/news', 'Новости', 'news'],
   ['/admin/launcher', 'Лаунчер', 'download'],
   ['/admin/users', 'Пользователи', 'users'],
@@ -25,7 +27,7 @@ function shell(req, active, title, body, { flash, actions } = {}) {
     body: html`
     <div class="admin">
       <aside class="admin-nav card">
-        ${SECTIONS.map(([h, l, i]) => html`<a class="${active === h ? 'active' : ''}" href="${h}">${icon(i)}${l}</a>`)}
+        ${(() => { const unread = support.unreadCount(); return SECTIONS.map(([h, l, i]) => html`<a class="${active === h ? 'active' : ''}" href="${h}">${icon(i)}${l}${h === '/admin/support' && unread ? html`<span class="nav-count">${unread}</span>` : ''}</a>`); })()}
       </aside>
       <section class="admin-main">
         <div class="page-head"><div><span class="eyebrow">Админка</span><h1>${title}</h1></div>${actions || ''}</div>
@@ -279,7 +281,9 @@ function users(req, { list, q, flash }) {
         <td class="small">${u.email}</td><td>${u.servers ? html`<a class="link" href="/admin/servers?q=${encodeURIComponent(u.email)}">${u.servers}</a>` : 0}</td><td class="nowrap">${fmt.rub(u.spent)}</td><td class="small muted nowrap">${fmt.date(u.created)}</td>
         <td class="right nowrap">${btnPrompt(req, `/admin/users/${u.id}/password`, 'Новый пароль', 'password', `Новый пароль для ${u.email} (минимум 8 символов):`)}${u.id !== req.user.id ? html`
           ${btnPost(req, `/admin/users/${u.id}/role`, u.role === 'admin' ? 'Снять админа' : 'Сделать админом', 'ghost', '', 'Изменить роль?')}
-          ${btnPost(req, `/admin/users/${u.id}/ban`, u.banned ? 'Разбанить' : 'Забанить', 'ghost danger', '', u.banned ? 'Разбанить?' : 'Забанить пользователя? Он не сможет войти.')}` : ''}</td>
+          ${btnPost(req, `/admin/users/${u.id}/ban`, u.banned ? 'Разбанить' : 'Забанить', 'ghost danger', '', u.banned ? 'Разбанить?' : 'Забанить пользователя? Он не сможет войти.')}
+          ${btnPost(req, `/admin/users/${u.id}/delete`, html`${icon('trash')}Удалить`, 'ghost danger', '', `Удалить ${u.email} навсегда?${u.servers ? ` Его сервера (${u.servers}) останутся без владельца — их можно передать другому.` : ''}`)}
+          ${u.servers ? btnPost(req, `/admin/users/${u.id}/delete`, 'Удалить с серверами', 'ghost danger', html`<input type="hidden" name="servers" value="1" />`, `Удалить ${u.email} и все его сервера (${u.servers}) вместе с голосами и статистикой? Это нельзя отменить.`) : ''}` : ''}</td>
       </tr>`)}</tbody></table>
       ${list.length ? '' : html`<div class="empty"><b>Никого не найдено</b></div>`}
     </div>`, { flash });
@@ -457,4 +461,53 @@ function importPage(req, { results, list, offline }) {
     </div>` : ''}`);
 }
 
-module.exports = { importPage, dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };
+/* ---- техподдержка ---- */
+const who = (t) => t.email || t.contact || `Гость #${t.id}`;
+function supportList(req, { list, status, q, flash }) {
+  const f = (v, l) => html`<a class="chip ${status === v ? 'active' : ''}" href="/admin/support${v !== 'open' ? `?status=${v}` : ''}">${l}</a>`;
+  return shell(req, '/admin/support', 'Поддержка', html`
+    <div class="admin-tools">
+      <div class="chips">${f('open', 'Открытые')}${f('closed', 'Закрытые')}${f('all', 'Все')}</div>
+      ${search('/admin/support', q, 'Email, Telegram или текст', status !== 'open' ? html`<input type="hidden" name="status" value="${status}" />` : '')}
+    </div>
+    <div class="card sup-list">
+      ${list.map((t) => html`<a class="sup-item ${t.unread_admin ? 'unread' : ''}" href="/admin/support/${t.id}">
+        <span class="sup-ava">${(who(t)[0] || '?').toUpperCase()}</span>
+        <span class="sup-main"><b>${who(t)}${t.user_id ? '' : html`<span class="badge">гость</span>`}${t.status === 'closed' ? html`<span class="badge">закрыт</span>` : ''}</b>
+          <small class="muted">${t.last_from_admin ? 'Вы: ' : ''}${t.last_text || ''}</small></span>
+        <span class="sup-meta"><small class="muted">${fmt.datetime(t.updated)}</small>${t.unread_admin ? html`<span class="nav-count">${t.unread_admin}</span>` : ''}</span>
+      </a>`)}
+      ${list.length ? '' : html`<div class="empty"><b>${status === 'open' ? 'Новых обращений нет' : 'Ничего не найдено'}</b>Кнопка «Поддержка» есть внизу справа на каждой странице сайта.</div>`}
+    </div>`, { flash });
+}
+
+function supportThread(req, { t, messages, servers, flash }) {
+  return shell(req, '/admin/support', who(t), html`
+    <div class="sup-wrap">
+      <div class="card sup-chat">
+        <div class="sup-msgs" id="supMsgs" data-thread="${t.id}" data-last="${messages.length ? messages[messages.length - 1].id : 0}">
+          ${messages.map((m) => html`<div class="sup-msg ${m.from_admin ? 'me' : ''}" data-id="${m.id}"><p>${m.text}</p><small>${fmt.datetime(m.ts)}</small></div>`)}
+        </div>
+        <form class="sup-form" id="supForm" method="post" action="/admin/support/${t.id}/reply">${csrfField(req)}
+          <textarea class="input" name="text" rows="2" maxlength="2000" placeholder="Ответ… (Enter — отправить, Shift+Enter — новая строка)" required></textarea>
+          <button class="btn primary">${icon('arrow')}Отправить</button>
+        </form>
+      </div>
+      <aside class="card pad sup-side">
+        <h3>${t.user_id ? 'Пользователь' : 'Гость'}</h3>
+        ${t.email ? html`<p><a class="link" href="/admin/users?q=${encodeURIComponent(t.email)}">${t.email}</a></p>` : ''}
+        ${t.contact ? html`<p class="small">Контакт: <b>${t.contact}</b></p>` : ''}
+        ${t.page ? html`<p class="small muted">Написал со страницы ${t.page}</p>` : ''}
+        <p class="small muted">Начало: ${fmt.datetime(t.created)}</p>
+        ${servers.length ? html`<p class="small">Сервера: ${servers.map((s, i) => html`${i ? ', ' : ''}<a class="link" href="/admin/servers/${s.id}">${s.name}</a>`)}</p>` : ''}
+        <p class="small muted" id="supSeen">${t.unread_user ? 'Последний ответ ещё не прочитан' : 'Пользователь видел все ответы'}</p>
+        <div class="row" style="margin-top:12px">
+          ${btnPost(req, `/admin/support/${t.id}/status`, t.status === 'closed' ? 'Открыть снова' : 'Закрыть', 'ghost', html`<input type="hidden" name="status" value="${t.status === 'closed' ? 'open' : 'closed'}" />`)}
+          ${btnPost(req, `/admin/support/${t.id}/delete`, 'Удалить', 'ghost danger', '', 'Удалить переписку целиком?')}
+        </div>
+      </aside>
+    </div>
+    <script src="/support-admin.js"></script>`, { flash });
+}
+
+module.exports = { supportList, supportThread, importPage, dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };

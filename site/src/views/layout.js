@@ -17,6 +17,8 @@ const asset = (name) => {
 
 const ICONS = {
   logo: '',
+  chat: '<path d="M4 5h16v11H9l-5 4V5z"/>',
+  send: '<path d="M4 12 20 4l-6 16-3-7-7-1z"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',
   puzzle: '<path d="M10 4a2 2 0 1 1 4 0v2h4v4h-2a2 2 0 1 0 0 4h2v4h-4v-2a2 2 0 1 0-4 0v2H6v-4h2a2 2 0 1 0 0-4H6V6h4z"/>',
   shield: '<path d="M12 3 5 6v5c0 4.5 3 8.3 7 10 4-1.7 7-5.5 7-10V6l-7-3z"/><path d="m9 12 2 2 4-4"/>',
@@ -163,6 +165,29 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
   ${metrics.enabled ? html`<div class="cookie" id="cookie" hidden><span>Мы используем cookie и сервисы веб-аналитики, чтобы сайт работал лучше. Продолжая пользоваться сайтом, вы соглашаетесь с этим.</span><button class="btn primary sm" id="cookieOk">Понятно</button></div>` : ''}
   <script src="${asset('dropdown.js')}"></script>
   <script src="${asset('app.js')}"></script>
+  ${(req.originalUrl || '').startsWith('/admin') ? '' : html`
+  <div class="sup-widget" id="sup" data-csrf="${req.csrf}">
+    <button class="sup-fab" id="supFab" type="button" aria-expanded="false" aria-controls="supPanel">${icon('chat')}<span>Поддержка</span><i class="sup-dot" id="supDot" hidden></i></button>
+    <div class="sup-panel" id="supPanel" role="dialog" aria-label="Поддержка" hidden>
+      <div class="sup-head">
+        <img class="logo" src="/assets/logo-mark.svg" alt="" />
+        <div><b>Поддержка ${site}</b><small>Обычно отвечаем в течение дня</small></div>
+        <button class="sup-x" id="supClose" type="button" aria-label="Закрыть">${icon('x')}</button>
+      </div>
+      <div class="sup-body" id="supBody">
+        <div class="sup-msg"><p>Здравствуйте! Напишите вопрос про сайт, рекламу или NLauncher — ответим прямо здесь. Переписка сохранится, к ней можно вернуться позже.</p></div>
+      </div>
+      <form class="sup-input" id="supForm">
+        <input class="input" name="contact" id="supContact" maxlength="120" placeholder="Email или Telegram — чтобы мы могли ответить" hidden />
+        <div class="sup-row">
+          <textarea name="text" id="supText" rows="1" maxlength="2000" placeholder="Сообщение…" required></textarea>
+          <button class="sup-send" type="submit" aria-label="Отправить">${icon('send')}</button>
+        </div>
+        <small class="sup-err" id="supErr" hidden></small>
+      </form>
+    </div>
+  </div>
+  <script src="${asset('support.js')}" defer></script>`}
 </body>
 </html>`;
 }

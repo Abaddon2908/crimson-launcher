@@ -8,6 +8,7 @@ const compression = require('compression');
 const { db, settings, now, DAY, KINDS, topServers, activeBanner, markPaid, monthStart, nextFreeStart, activeServices, ingameServers, logAdmin } = require('./db');
 const auth = require('./auth');
 const pinger = require('./pinger');
+const support = require('./support');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const { safeUrl, fmt } = require('./views/html');
@@ -671,6 +672,41 @@ app.get('/api/servers', (req, res) => {
   })));
 });
 
+/* ======================= Техподдержка (виджет) ======================= */
+const supportToken = (req) => {
+  const m = String(req.headers.cookie || '').match(new RegExp(`(?:^|;\\s*)${support.COOKIE}=([A-Za-z0-9_-]{20,64})`));
+  return m ? m[1] : '';
+};
+const supportCookie = (res, token) => res.append('Set-Cookie', `${support.COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${365 * 86400}${(process.env.SITE_URL || '').startsWith('https://') ? '; Secure' : ''}`);
+const supportJson = (req, t, after) => ({
+  messages: t ? support.messages(t.id, after) : [],
+  unread: t ? t.unread_user : 0,
+  closed: t ? t.status === 'closed' : false,
+  needContact: !req.user && !(t && t.contact),
+});
+app.get('/support/messages', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const t = support.findThread(req, supportToken(req));
+  const out = supportJson(req, t, int(req.query.after));
+  if (t && req.query.read === '1' && t.unread_user) { support.markReadByUser(t.id); out.unread = 0; }
+  res.json(out);
+});
+app.post('/support/messages', limiter(10 * 60_000, 30), (req, res) => {
+  const text = String(req.body.text ?? '').trim().slice(0, support.MAX_TEXT);
+  if (!text) return res.status(400).json({ error: 'Напишите сообщение' });
+  const contact = str(req.body.contact, 120);
+  let t = support.findThread(req, supportToken(req));
+  if (!t) {
+    if (!req.user && !contact) return res.status(400).json({ error: 'Укажите email или Telegram, чтобы мы могли ответить, даже если вы закроете сайт', needContact: true });
+    t = support.createThread(req, { contact, page: str(req.body.page, 200) });
+    if (!req.user) supportCookie(res, t.token);
+  } else if (contact && !t.contact) {
+    db.prepare('UPDATE support_threads SET contact = ? WHERE id = ?').run(contact, t.id);
+  }
+  support.userMessage(t.id, text);
+  res.json(supportJson(req, support.get(t.id), int(req.body.after)));
+});
+
 /* ======================= Админка ======================= */
 const adm = express.Router();
 adm.use(auth.requireAdmin);
@@ -679,6 +715,7 @@ const flashOf = (req) => ({
   nouser: '⚠ Пользователь с таким email не найден — владелец не изменён',
   shortpw: '⚠ Пароль не изменён: нужно минимум 8 символов',
   dupcoupon: '⚠ Купон с таким кодом уже есть',
+  deleted: 'Удалено', selfdel: '⚠ Себя удалить нельзя',
 }[req.query.f] || '');
 const audit = (req, action, details) => logAdmin(req.user.id, action, details);
 const serverName = (id) => db.prepare('SELECT name FROM servers WHERE id = ?').get(id)?.name || `#${id}`;
@@ -1010,6 +1047,55 @@ adm.post('/users/:id/password', (req, res) => {
   const pw = String(req.body.password || '');
   if (pw.length >= 8) { db.prepare('UPDATE users SET pass = ? WHERE id = ?').run(auth.hashPassword(pw), id); audit(req, 'Сменил пароль пользователю', userEmail(id)); }
   res.redirect(`/admin/users?f=${pw.length >= 8 ? 'saved' : 'shortpw'}`);
+});
+
+adm.post('/users/:id/delete', (req, res) => {
+  const id = int(req.params.id);
+  const u = db.prepare('SELECT id, email, role FROM users WHERE id = ?').get(id);
+  if (!u || id === req.user.id) return res.redirect('/admin/users?f=selfdel');
+  const withServers = req.body.servers === '1';
+  const n = withServers ? db.prepare('DELETE FROM servers WHERE owner_id = ?').run(id).changes : 0;
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+  audit(req, 'Удалил пользователя', `${u.email}${withServers ? ` вместе с серверами (${n})` : ''}`);
+  res.redirect('/admin/users?f=deleted');
+});
+
+/* ---- техподдержка ---- */
+adm.get('/support', (req, res) => {
+  const status = ['open', 'closed', 'all'].includes(req.query.status) ? req.query.status : 'open';
+  const q = str(req.query.q, 80);
+  send(res, V.adm.supportList(req, { list: support.list({ status, q }), status, q, flash: flashOf(req) }));
+});
+adm.get('/support/:id', (req, res) => {
+  const t = support.get(int(req.params.id));
+  if (!t) return res.redirect('/admin/support');
+  support.markReadByAdmin(t.id);
+  const servers = t.user_id ? db.prepare('SELECT id, name FROM servers WHERE owner_id = ?').all(t.user_id) : [];
+  send(res, V.adm.supportThread(req, { t, messages: support.messages(t.id), servers, flash: flashOf(req) }));
+});
+adm.get('/support/:id/messages', (req, res) => {
+  const t = support.get(int(req.params.id));
+  if (!t) return res.status(404).json({ error: 'not found' });
+  support.markReadByAdmin(t.id);
+  res.set('Cache-Control', 'no-store').json({ messages: support.messages(t.id, int(req.query.after)), unreadByUser: t.unread_user });
+});
+adm.post('/support/:id/reply', (req, res) => {
+  const t = support.get(int(req.params.id));
+  const text = String(req.body.text ?? '').trim().slice(0, support.MAX_TEXT);
+  if (t && text) support.adminMessage(t.id, req.user.id, text);
+  if (req.get('accept')?.includes('application/json')) return res.json({ messages: t ? support.messages(t.id, int(req.body.after)) : [] });
+  res.redirect(`/admin/support/${int(req.params.id)}`);
+});
+adm.post('/support/:id/status', (req, res) => {
+  const id = int(req.params.id);
+  const status = req.body.status === 'closed' ? 'closed' : 'open';
+  support.setStatus(id, status);
+  res.redirect(status === 'closed' ? '/admin/support?f=ok' : `/admin/support/${id}`);
+});
+adm.post('/support/:id/delete', (req, res) => {
+  support.remove(int(req.params.id));
+  audit(req, 'Удалил переписку поддержки', `#${int(req.params.id)}`);
+  res.redirect('/admin/support?f=deleted');
 });
 
 /* ---- загрузки лаунчера ---- */
