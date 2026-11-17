@@ -719,6 +719,64 @@ adm.get('/servers', (req, res) => {
   send(res, V.adm.servers(req, { list, status, q, flash: flashOf(req) }));
 });
 
+/* ---- импорт серверов списком: данные берутся из пинга самого сервера ---- */
+/** «1.8.x-1.21.4», «Paper 1.21.1», «Requires MC 1.8 / 1.21» → { min, max }; номера прокси вроде Velocity 3.3.0 отбрасываем */
+function versionsFromPing(name) {
+  const found = String(name || '').match(/\d+\.\d+(?:\.\d+)?/g) || [];
+  const ok = found.filter((v) => { const major = Number(v.split('.')[0]); return major === 1 || (major >= 26 && major < 100); }).sort(tags.cmp);
+  return ok.length ? { min: ok[0], max: ok[ok.length - 1] } : { min: '', max: '' };
+}
+/** Название из адреса: play.funtime.su → Funtime */
+function nameFromHost(address) {
+  if (/^[\d.]+(:\d+)?$/.test(address)) return address; // голый IP — оставляем как есть
+  const parts = address.split(':')[0].split('.').filter((p) => !/^(mc|play|join|srv|server|s\d*)$/i.test(p));
+  const base = parts.length > 1 ? parts[parts.length - 2] : parts[0] || address;
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+function parseImport(text) {
+  const out = [], seen = new Set();
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.replace(/#.*/, '').trim();
+    if (!line) continue;
+    const [a, b] = line.includes('|') ? line.split('|').map((x) => x.trim()) : ['', line];
+    const address = (b || a).replace(/^[a-z]+:\/\//i, '').replace(/\/.*$/, '').toLowerCase();
+    if (!ADDR_RE.test(address) || seen.has(address)) continue;
+    seen.add(address);
+    out.push({ name: (b ? a : '').slice(0, 60), address });
+  }
+  return out.slice(0, 100);
+}
+adm.get('/servers/import', (req, res) => send(res, V.adm.importPage(req, {})));
+adm.post('/servers/import', async (req, res, next) => {
+  try {
+    const items = parseImport(req.body.list);
+    const addOffline = req.body.offline === '1';
+    const results = [];
+    for (let i = 0; i < items.length; i += 10) {
+      await Promise.all(items.slice(i, i + 10).map(async (it) => {
+        if (db.prepare('SELECT id FROM servers WHERE ulower(address) = ?').get(it.address)) return results.push({ ...it, result: 'exists' });
+        let p = await pinger.ping(it.address);
+        if (!p.online) p = await pinger.ping(it.address); // вторая попытка: первый ответ иногда не успевает
+        if (!p.online && !addOffline) return results.push({ ...it, result: 'offline' });
+        const v = versionsFromPing(p.version);
+        const d = {
+          name: it.name || nameFromHost(it.address), address: it.address, version_min: v.min, version_max: v.max !== v.min ? v.max : '',
+          tags: '', description: p.motd || '', website: '', discord: '', banner: '', vote_webhook: '', votifier_host: '', votifier_port: 8192, votifier_key: '', votifier_token: '',
+        };
+        d.version = tags.versionLabel(d);
+        const r = db.prepare(`INSERT INTO servers (owner_id, ${SERVER_COLS.join(', ')}, vote_secret, status, created) VALUES (?, ${SERVER_COLS.map(() => '?').join(', ')}, ?, 'approved', ?)`)
+          .run(req.user.id, ...SERVER_COLS.map((k) => d[k]), crypto.randomBytes(24).toString('hex'), now());
+        const id = Number(r.lastInsertRowid);
+        if (p.online) await pinger.pingServer({ id, address: it.address }).catch(() => {});
+        results.push({ ...it, name: d.name, id, players: p.players, online: p.online, result: 'added' });
+      }));
+    }
+    const added = results.filter((r) => r.result === 'added').length;
+    if (added) audit(req, 'Импорт серверов', `добавлено ${added} из ${items.length}`);
+    send(res, V.adm.importPage(req, { results, list: req.body.list, offline: addOffline }));
+  } catch (e) { next(e); }
+});
+
 adm.get('/servers/:id', (req, res) => {
   const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(int(req.params.id));
   if (!s) return res.redirect('/admin/servers');

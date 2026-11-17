@@ -80,6 +80,7 @@ function servers(req, { list, status, q, flash }) {
     <div class="admin-tools">
       <div class="chips">${f('', 'Все')}${f('pending', 'На модерации')}${f('approved', 'Опубликованы')}${f('rejected', 'Отклонены')}</div>
       ${search('/admin/servers', q, 'Название, IP или email владельца', status ? html`<input type="hidden" name="status" value="${status}" />` : '')}
+      <a class="btn ghost sm" href="/admin/servers/import">${icon('plus')}Импорт списком</a>
     </div>
     <div class="card table-wrap"><table class="table">
       <thead><tr><th></th><th>Сервер</th><th>Владелец</th><th>Онлайн</th><th>Голоса</th><th>Статус / услуги</th><th></th></tr></thead>
@@ -414,4 +415,43 @@ function settingsPage(req, { s, flash, hooks }) {
     </form>`, { flash });
 }
 
-module.exports = { dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };
+// Стартовый список: публичные адреса известных серверов. Каждый проверяется пингом, мёртвые не добавятся.
+const STARTER = `FunTime | mc.funtime.su
+HolyWorld | mc.holyworld.ru
+ReallyWorld | mc.reallyworld.ru
+MusteryWorld | mc.musteryworld.net
+MineBlaze | mc.mineblaze.net
+DexLand | mc.dexland.org
+MasedWorld | mc.masedworld.net
+SpookyTime | mc.spookytime.net
+JetMine | mc.jetmine.ru
+SaturnX | mc.saturn-x.space
+MineLand | mc.mineland.net
+LastCraft | mc.lastcraft.net
+ProstoCraft | mc.prostocraft.ru`;
+const IMPORT_RESULT = { added: ['Добавлен', 'ok'], exists: ['Уже есть', ''], offline: ['Не отвечает', 'warn'] };
+
+function importPage(req, { results, list, offline }) {
+  return shell(req, '/admin/servers', 'Импорт серверов', html`
+    <div class="card pad">
+      <p class="muted">По одному серверу на строку: <code>адрес</code> или <code>Название | адрес</code>. Сайт опросит каждый сервер и сам возьмёт описание (MOTD), иконку, версию и онлайн. Сервера сразу публикуются, владельцем записываетесь вы — потом его можно передать настоящему владельцу в карточке сервера. Теги и описание поправьте вручную. До 100 строк за раз.</p>
+      <form method="post" action="/admin/servers/import" style="display:grid;gap:14px;margin-top:14px">
+        ${csrfField(req)}
+        <textarea class="input mono" name="list" rows="14" spellcheck="false">${list ?? STARTER}</textarea>
+        <label class="check"><input type="checkbox" name="offline" value="1" ${offline ? 'checked' : ''} /><span>Добавлять и те, что сейчас не отвечают</span></label>
+        <div class="row"><button class="btn primary">${icon('plus')}Проверить и добавить</button><span class="muted small">Опрос занимает до 5 секунд на каждые 10 серверов.</span></div>
+      </form>
+    </div>
+    ${results ? html`
+    <div class="card table-wrap" style="margin-top:18px"><table class="table">
+      <thead><tr><th>Сервер</th><th>Адрес</th><th>Онлайн</th><th>Результат</th></tr></thead>
+      <tbody>${results.map((r) => html`<tr>
+        <td>${r.id ? html`<a class="srv-link" href="/admin/servers/${r.id}"><b>${r.name || '—'}</b></a>` : r.name || '—'}</td>
+        <td class="small">${r.address}</td>
+        <td class="small">${r.result === 'added' ? (r.online ? `${r.players}` : 'офлайн') : ''}</td>
+        <td><span class="badge ${IMPORT_RESULT[r.result][1]}">${IMPORT_RESULT[r.result][0]}</span></td></tr>`)}</tbody></table>
+      ${results.length ? '' : html`<div class="empty"><b>Не нашлось ни одного адреса</b></div>`}
+    </div>` : ''}`);
+}
+
+module.exports = { importPage, dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };
