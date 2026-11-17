@@ -151,10 +151,24 @@ function serverDetail(req, { s, owner, services, orders, votes, voteStats, flash
             <dt>Добавлен</dt><dd>${fmt.date(s.created)}</dd>
             <dt>Вебхук голосов</dt><dd class="small">${s.vote_webhook || '—'}</dd>
           </dl>
+          <form class="owner-form" method="post" action="/admin/servers/${s.id}/owner">${csrfField(req)}
+            <label class="field"><span>${owner ? 'Передать другому пользователю' : 'Назначить владельца'}</span>
+              <div class="owner-pick">
+                ${icon('users')}<input class="input" name="user" id="ownerInput" list="ownerList" autocomplete="off" placeholder="Начните вводить email или имя…" required />
+                <datalist id="ownerList"></datalist>
+                <button class="btn primary sm">${owner ? 'Передать' : 'Назначить'}</button>
+              </div>
+            </label>
+            <label class="check"><input type="checkbox" name="notify" value="1" checked /> Сообщить новому владельцу на почту</label>
+          </form>
+          ${owner ? btnPost(req, `/admin/servers/${s.id}/owner`, 'Снять владельца', 'ghost sm', html`<input type="hidden" name="user" value="none" />`, `Сервер ${s.name} останется без владельца. Продолжить?`) : ''}
+          <script>(() => { const inp = document.getElementById('ownerInput'), list = document.getElementById('ownerList'); let t = 0;
+            inp.addEventListener('input', () => { clearTimeout(t); t = setTimeout(async () => { const q = inp.value.trim(); if (q.length < 2) return;
+              try { const r = await fetch('/admin/users.json?q=' + encodeURIComponent(q), { credentials: 'same-origin' }); if (!r.ok) return;
+                list.replaceChildren(...(await r.json()).map((u) => { const o = document.createElement('option'); o.value = u.email; o.label = u.name + (u.servers ? ' · серверов: ' + u.servers : ''); return o; })); } catch {} }, 200); }); })();</script>
           <div class="row" style="margin-top:16px">
             ${s.status !== 'approved' ? btnPost(req, `/admin/servers/${s.id}/approve`, 'Одобрить', 'primary') : ''}
             ${s.status !== 'rejected' ? btnPrompt(req, `/admin/servers/${s.id}/reject`, 'Отклонить', 'reason', 'Причина отказа (увидит владелец):') : ''}
-            ${btnPrompt(req, `/admin/servers/${s.id}/owner`, 'Сменить владельца', 'email', 'Email нового владельца:')}
             ${btnPost(req, `/admin/servers/${s.id}/delete`, 'Удалить сервер', 'ghost danger', '', `Удалить ${s.name}? Голоса, история и заказы сервера будут отвязаны.`)}
           </div>
         </div>

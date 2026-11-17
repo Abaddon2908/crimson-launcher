@@ -777,7 +777,7 @@ const flashOf = (req) => ({
   nouser: '⚠ Пользователь с таким email не найден — владелец не изменён',
   shortpw: '⚠ Пароль не изменён: нужно минимум 8 символов',
   dupcoupon: '⚠ Купон с таким кодом уже есть',
-  deleted: 'Удалено', selfdel: '⚠ Себя удалить нельзя',
+  deleted: 'Удалено', selfdel: '⚠ Себя удалить нельзя', owner: 'Владелец назначен — сервер появился у него в кабинете',
   mailok: 'Тестовое письмо отправлено на ваш email — проверьте почту (и папку «Спам»)',
   mailoff: '⚠ Сначала заполните сервер SMTP и адрес отправителя и сохраните настройки',
   mailerr: `⚠ Письмо не отправилось: ${str(req.query.e, 200)}`,
@@ -932,11 +932,31 @@ adm.post('/servers/:id/delete', (req, res) => {
   db.prepare('DELETE FROM servers WHERE id = ?').run(id);
   res.redirect('/admin/servers?f=ok');
 });
+/** Поиск пользователей для выбора владельца (подсказки в карточке сервера) */
+adm.get('/users.json', (req, res) => {
+  const q = str(req.query.q, 80);
+  if (q.length < 2) return res.json([]);
+  res.json(db.prepare(`SELECT u.id, u.email, u.name, (SELECT COUNT(*) FROM servers s WHERE s.owner_id = u.id) AS servers
+    FROM users u WHERE ulower(u.email) LIKE ? OR ulower(u.name) LIKE ? ORDER BY u.id DESC LIMIT 10`).all(like(q), like(q)));
+});
 adm.post('/servers/:id/owner', (req, res) => {
   const id = int(req.params.id);
-  const u = db.prepare('SELECT id, email FROM users WHERE email = ?').get(str(req.body.email, 120).toLowerCase());
-  if (u) { db.prepare('UPDATE servers SET owner_id = ? WHERE id = ?').run(u.id, id); audit(req, 'Сменил владельца', `${serverName(id)} → ${u.email}`); }
-  res.redirect(`/admin/servers/${id}?f=${u ? 'saved' : 'nouser'}`);
+  const s = db.prepare('SELECT * FROM servers WHERE id = ?').get(id);
+  if (!s) return res.redirect('/admin/servers');
+  const raw = str(req.body.user ?? req.body.email, 120).toLowerCase();
+  if (raw === 'none') {
+    db.prepare('UPDATE servers SET owner_id = NULL WHERE id = ?').run(id);
+    audit(req, 'Снял владельца', s.name);
+    return res.redirect(`/admin/servers/${id}?f=saved`);
+  }
+  // email или номер пользователя (#12)
+  const u = /^#?\d+$/.test(raw) ? db.prepare('SELECT id, email, name FROM users WHERE id = ?').get(int(raw.replace('#', '')))
+    : db.prepare('SELECT id, email, name FROM users WHERE email = ?').get(raw);
+  if (!u) return res.redirect(`/admin/servers/${id}?f=nouser`);
+  db.prepare('UPDATE servers SET owner_id = ? WHERE id = ?').run(u.id, id);
+  audit(req, 'Сменил владельца', `${s.name} → ${u.email}`);
+  if (req.body.notify && u.id !== req.user.id) mailer.mails.serverTransferred(u.email, s, abs(serverPath(s)));
+  res.redirect(`/admin/servers/${id}?f=owner`);
 });
 adm.post('/servers/:id/reset-votes', (req, res) => {
   const id = int(req.params.id);

@@ -732,3 +732,9 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 .l-legend .l2::before { background: var(--ok); }
 .l-foot { display: flex; flex-direction: column; gap: 6px; margin-top: 16px; padding-top: 14px; box-shadow: inset 0 1px 0 rgba(255,255,255,.05); font-size: 13.5px; color: #cfc4c6; }
 @media (max-width: 860px) { .l-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* админка: выбор владельца сервера */
+.owner-form { margin-top: 16px; display: grid; gap: 8px; }
+.owner-pick { position: relative; display: flex; gap: 8px; align-items: center; }
+.owner-pick > .ic { position: absolute; left: 13px; width: 17px; height: 17px; color: var(--muted); pointer-events: none; }
+.owner-pick .input { flex: 1; min-width: 0; padding-left: 38px; }
+.owner-form + form.inline { margin-top: 10px; }
