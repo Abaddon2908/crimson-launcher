@@ -18,11 +18,13 @@ const DEFAULTS = {
     accent: 'wine',
     animations: true,
     shareStats: true,
+    skinsMod: true, // ставить мод CustomSkinLoader в сборки с модлоадером
     lastInstance: null,
     servers: [],
   },
   accounts: { active: null, list: [] },
   instances: { list: [] },
+  skins: { token: '', byNick: {} }, // скины офлайн-ников, загруженные на сайт
 };
 
 function file(name) { return path.join(paths.data, `${name}.json`); }

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, nativeTheme, dialog } = require('electron');
 const path = require('path');
 
 app.setName('NLauncher');
@@ -44,6 +44,7 @@ app.whenReady().then(() => {
     launch: require('./core/launch'),
     java: require('./core/java'),
     telemetry: require('./core/telemetry'),
+    skins: require('./core/skins'),
   };
 
   const send = (ch, data) => win && !win.isDestroyed() && win.webContents.send(ch, data);
@@ -125,6 +126,16 @@ app.whenReady().then(() => {
   core.instances.ensureDefault();
   core.telemetry.start(core.config, { isInGame: () => Boolean(core.launch.status()), version: app.getVersion() });
   handle('stats:online', () => core.telemetry.online());
+
+  // скины
+  handle('skin:current', () => core.skins.current(core.config.site));
+  handle('skin:pick', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Выберите скин (PNG 64×64)', filters: [{ name: 'Скин Minecraft', extensions: ['png'] }], properties: ['openFile'] });
+    return r.canceled || !r.filePaths[0] ? null : core.skins.readFile(r.filePaths[0]);
+  });
+  handle('skin:mojang', (png, variant) => core.skins.applyMojang(png, variant));
+  handle('skin:cape', (id) => core.skins.setCape(id));
+  handle('skin:site', (png, variant) => core.skins.uploadSite(core.config.site, png, variant));
   createWindow();
 });
 

@@ -11,6 +11,7 @@ const pinger = require('./pinger');
 const support = require('./support');
 const notify = require('./adminNotify');
 const mailer = require('./mailer');
+const skins = require('./skins');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const { safeUrl, fmt } = require('./views/html');
@@ -732,6 +733,38 @@ app.get('/api/servers', (req, res) => {
   res.set('Cache-Control', 'public, max-age=60').json(topServers({ limit: 100 }).map((s) => ({
     id: s.id, rank: s.rank, name: s.name, address: s.address, online: Boolean(s.online), players: s.players, max: s.max_players, votes: s.votes, promo: Boolean(s.promo), tags: s.tagList,
   })));
+});
+
+/* ======================= Скины (для игроков без лицензии) ======================= */
+const skinCommand = (code, variant) => `/skin url ${abs(`/skins/${code}.png`)}${variant === 'slim' ? ' slim' : ''}`;
+// загрузка из лаунчера: { nick, variant, png: base64, token }
+app.post('/api/skins', limiter(60 * 60_000, 30), (req, res) => {
+  let buf = null;
+  try { buf = Buffer.from(String(req.body?.png || ''), 'base64'); } catch { /* ниже — ошибка */ }
+  const r = skins.upload({ nick: req.body?.nick, variant: req.body?.variant, png: buf, token: req.body?.token });
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.json({ ...r, url: abs(`/skins/${r.code}.png`), page: abs(`/skin/${r.nick}`), command: skinCommand(r.code, r.variant) });
+});
+app.get('/skins/:code.png', (req, res) => {
+  const b = skins.png(req.params.code);
+  if (!b) return res.status(404).send('Not found');
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*' }).send(Buffer.from(b));
+});
+// CustomSkinAPI для мода CustomSkinLoader: /skinapi/<ник>.json и /skinapi/textures/<код>
+app.get('/skinapi/:nick.json', (req, res) => {
+  const s = skins.byNick(req.params.nick);
+  if (!s) return res.status(404).json({});
+  res.set('Cache-Control', 'public, max-age=60').json({ username: s.nick, skins: { [s.variant === 'slim' ? 'slim' : 'default']: s.code } });
+});
+app.get('/skinapi/textures/:code', (req, res) => {
+  const b = skins.png(req.params.code);
+  if (!b) return res.status(404).send('Not found');
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' }).send(Buffer.from(b));
+});
+app.get('/skin/:nick', (req, res) => {
+  const s = skins.byNick(req.params.nick);
+  if (!s) return send(res, V.pub.skinPage(req, { nick: str(req.params.nick, 16) }), 404);
+  send(res, V.pub.skinPage(req, { s, url: abs(`/skins/${s.code}.png`), command: skinCommand(s.code, s.variant) }));
 });
 
 /* ======================= Техподдержка (виджет) ======================= */

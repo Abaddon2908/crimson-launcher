@@ -45,6 +45,13 @@ contextBridge.exposeInMainWorld('api', {
   servers: { ping: (a) => call('servers:ping', a) },
   feed: () => call('feed:load'),
   online: () => call('stats:online'),
+  skin: {
+    current: () => call('skin:current'),
+    pick: () => call('skin:pick'),
+    mojang: (png, variant) => call('skin:mojang', png, variant),
+    cape: (id) => call('skin:cape', id),
+    site: (png, variant) => call('skin:site', png, variant),
+  },
   game: {
     launch: (id, server) => call('game:launch', id, server),
     stop: () => call('game:stop'),

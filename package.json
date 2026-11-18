@@ -1,7 +1,7 @@
 {
   "name": "nlauncher",
   "productName": "NLauncher",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "NLauncher — Minecraft-лаунчер от NeoDev",
   "main": "src/main.js",
   "author": {

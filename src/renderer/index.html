@@ -34,6 +34,7 @@
         <button class="nav-btn" data-page="instances" data-tip="Сборки"><i data-icon="layers"></i></button>
         <button class="nav-btn" data-page="mods" data-tip="Моды"><i data-icon="puzzle"></i></button>
         <button class="nav-btn" data-page="servers" data-tip="Сервера"><i data-icon="server"></i></button>
+        <button class="nav-btn" data-page="skin" data-tip="Скин"><i data-icon="shirt"></i></button>
         <span class="nav-indicator"></span>
       </div>
       <div class="nav-bottom">
@@ -141,6 +142,47 @@
         <div class="server-grid" id="serverGrid"></div>
       </section>
 
+      <!-- СКИН -->
+      <section class="page" id="page-skin">
+        <div class="page-head">
+          <div><h2>Скин</h2><p class="muted" id="skinSub">Предпросмотр в 3D и установка скина.</p></div>
+        </div>
+        <div class="skin-wrap">
+          <div class="skin-stage glass">
+            <canvas id="skinCanvas"></canvas>
+            <div class="skin-anims seg" id="skinAnims">
+              <button class="active" data-v="idle">Стоит</button>
+              <button data-v="walk">Идёт</button>
+              <button data-v="run">Бежит</button>
+              <button data-v="wave">Машет</button>
+            </div>
+            <span class="skin-badge" id="skinBadge" hidden>Не сохранено</span>
+          </div>
+          <div class="skin-side">
+            <div class="set-card glass">
+              <h4>Файл скина</h4>
+              <p class="muted small">PNG 64×64. Модель — как у Стива (широкие руки) или как у Алекс (тонкие).</p>
+              <div class="row wrap" style="margin-top:12px">
+                <button class="btn ghost" id="skinPick"><i data-icon="folder"></i>Выбрать PNG…</button>
+                <div class="seg" id="skinModel"><button class="active" data-v="classic">Классическая</button><button data-v="slim">Тонкая</button></div>
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn primary" id="skinSave" disabled><i data-icon="check"></i><span>Установить скин</span></button>
+                <button class="btn ghost" id="skinReset" hidden>Отменить</button>
+              </div>
+            </div>
+            <div class="set-card glass" id="skinCapes" hidden>
+              <h4>Плащ</h4>
+              <div class="cape-list" id="capeList"></div>
+            </div>
+            <div class="set-card glass" id="skinServer" hidden>
+              <h4>Скин на серверах</h4>
+              <div id="skinServerBody"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- НАСТРОЙКИ -->
       <section class="page" id="page-settings">
         <div class="page-head"><div><h2>Настройки</h2><p class="muted">Сохраняются автоматически.</p></div></div>
@@ -193,6 +235,10 @@
               <label class="switch"><input type="checkbox" id="sStats" /><span></span></label>
             </div>
             <div class="set-row">
+              <div><b>Скины игроков NLauncher в игре</b><small>Ставит в сборки Fabric / Forge мод CustomSkinLoader: игроки NLauncher видят скины друг друга даже на серверах без SkinsRestorer</small></div>
+              <label class="switch"><input type="checkbox" id="sSkinsMod" /><span></span></label>
+            </div>
+            <div class="set-row">
               <div><b>Анимации</b></div>
               <label class="switch"><input type="checkbox" id="sAnim" /><span></span></label>
             </div>
@@ -217,6 +263,7 @@
   <div class="modal-wrap" id="modal"><div class="modal glass" id="modalBody"></div></div>
   <div class="toasts" id="toasts"></div>
 
+  <script src="vendor/skinview3d.bundle.js"></script>
   <script src="mock.js"></script>
   <script src="icons.js"></script>
   <script src="dropdown.js"></script>

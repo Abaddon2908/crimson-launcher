@@ -344,6 +344,48 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
+function skinPage(req, { nick, s, url, command }) {
+  if (!s) {
+    return layout(req, {
+      title: `Скин ${nick}`, noindex: true,
+      body: html`<div class="empty big"><b>У игрока ${nick} нет скина на NLauncher</b>Скин можно загрузить в лаунчере: вкладка «Скин».<br/><br/><a class="btn primary" href="/launcher">${icon('download')}Скачать NLauncher</a></div>`,
+    });
+  }
+  return layout(req, {
+    title: `Скин ${s.nick} для Minecraft`, noindex: true, image: url,
+    description: `Скин игрока ${s.nick}: 3D-просмотр, PNG и команда для SkinsRestorer.`,
+    body: html`
+    <section class="skin-page">
+      <div class="skin-stage card">
+        <canvas id="skinCanvas" data-skin="/skins/${s.code}.png" data-slim="${s.variant === 'slim' ? '1' : ''}"></canvas>
+        <div class="skin-ctrl">
+          <button class="chip active" data-anim="idle" type="button">Стоит</button>
+          <button class="chip" data-anim="walk" type="button">Идёт</button>
+          <button class="chip" data-anim="run" type="button">Бежит</button>
+          <button class="chip" data-anim="wave" type="button">Машет</button>
+        </div>
+      </div>
+      <div class="skin-info">
+        <span class="eyebrow">Скин игрока</span>
+        <h1>${s.nick}</h1>
+        <p class="muted">Модель: ${s.variant === 'slim' ? 'тонкая (Alex)' : 'классическая (Steve)'} · обновлён ${fmt.date(s.updated)}</p>
+        <div class="card pad skin-cmd">
+          <h2 class="h3">Поставить скин на сервере</h2>
+          <p class="muted small">На серверах со SkinsRestorer отправьте в чат команду — скин увидят все игроки сервера:</p>
+          <div class="ip-copy" data-copy="${command}" data-copy-msg="Команда скопирована — вставьте её в чат на сервере"><code>${command}</code>${icon('copy')}</div>
+          <p class="muted small">Если сервер не разрешает ставить скин по ссылке, игроки NLauncher всё равно увидят этот скин.</p>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <a class="btn ghost" href="${url}" download="${s.nick}.png">${icon('download')}Скачать PNG</a>
+          <a class="btn primary" href="/launcher">Сменить скин в NLauncher</a>
+        </div>
+      </div>
+    </section>
+    <script src="/vendor/skinview3d.bundle.js"></script>
+    <script src="${'/skin-view.js'}"></script>`,
+  });
+}
+
 function verifyPage(req, { next, error, wait = 0, sent }) {
   return layout(req, {
     title: 'Подтверждение email', noindex: true,
@@ -415,7 +457,7 @@ const LP_FEATURES = [
   ['layers', 'Любые версии', 'От старых классических до самой свежей. Лаунчер сам скачает игру и подходящую Java.'],
   ['puzzle', 'Моды в один клик', 'Каталог Modrinth прямо в лаунчере: поиск и установка без возни с файлами.'],
   ['server', 'Сервера из топа', 'Лучшие сервера мониторинга на главном экране — подключение сразу, без ввода IP.'],
-  ['bolt', 'Быстрый и лёгкий', 'Минималистичный интерфейс, ничего лишнего. Память и параметры Java — в настройках.'],
+  ['star', 'Скины в 3D', 'Предпросмотр скина и плаща. С лицензией скин ставится в аккаунт, без лицензии — работает на серверах со SkinsRestorer.'],
   ['shield', 'Безопасный вход', 'Пароль от Microsoft вводится на официальной странице Microsoft, лаунчер его не видит.'],
 ];
 const LP_FAQ = [
@@ -660,4 +702,4 @@ function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
+module.exports = { skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };

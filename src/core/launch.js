@@ -11,6 +11,7 @@ const instances = require('./instances');
 const { json, download } = require('./net');
 const feed = require('./feed');
 const ingame = require('./ingame');
+const skinmod = require('./skinmod');
 
 let running = null; // { client, instanceId, started }
 
@@ -80,6 +81,11 @@ async function start(instanceId, emit, server = null) {
     if (r.added || r.removed) emit({ log: `[NLauncher] Список серверов игры: добавлено ${r.added}, убрано ${r.removed}` });
   } catch (e) {
     emit({ log: `[NLauncher] Список серверов игры не обновлён: ${e.message}` });
+  }
+
+  // скины игроков NLauncher в игре (можно выключить в настройках)
+  if (s.skinsMod !== false) {
+    try { await skinmod.ensure(inst, gameDir, require('../../config.json').site, (m) => emit({ log: m })); } catch (e) { emit({ log: `[NLauncher] Скины: ${e.message}` }); }
   }
 
   const memMax = inst.memoryMax || s.memoryMax;

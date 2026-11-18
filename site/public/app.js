@@ -13,7 +13,7 @@
     const c = e.target.closest('[data-copy]');
     if (c) {
       e.preventDefault();
-      navigator.clipboard.writeText(c.dataset.copy).then(() => toast(`IP скопирован: ${c.dataset.copy}`), () => toast(c.dataset.copy));
+      navigator.clipboard.writeText(c.dataset.copy).then(() => toast(c.dataset.copyMsg || `IP скопирован: ${c.dataset.copy}`), () => toast(c.dataset.copy));
       return;
     }
     const conf = e.target.closest('[data-confirm]');

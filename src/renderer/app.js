@@ -53,6 +53,7 @@ function go(page) {
   if (page === 'mods') renderMods();
   if (page === 'servers') renderServers();
   if (page === 'instances') renderInstances();
+  if (page === 'skin') renderSkin();
 }
 $$('.nav-btn').forEach((b) => b.addEventListener('click', () => go(b.dataset.page)));
 document.addEventListener('click', (e) => { const g = e.target.closest('[data-goto]'); if (g) go(g.dataset.goto); });
@@ -545,6 +546,7 @@ function bindSettings() {
   bindChk('#sFull', 'fullscreen'); bindChk('#sHide', 'closeOnLaunch'); bindChk('#sConsole', 'showConsole');
   bindChk('#sAnim', 'animations', (v) => document.body.classList.toggle('no-anim', !v));
   bindChk('#sStats', 'shareStats');
+  bindChk('#sSkinsMod', 'skinsMod');
   $('#rootPath').textContent = state.info.root;
   $('#openRoot').onclick = () => api.openPath(state.info.root);
   $('#about').textContent = `${state.info.config.brand} Launcher v${state.info.version} · ${state.info.platform}`;
@@ -560,6 +562,130 @@ function save(p) {
     safe(() => api.settings.set(patch)).then((r) => r && toast('Настройки сохранены'));
   }, 300);
 }
+
+/* ---------------- скин ---------------- */
+const skin = { viewer: null, cur: null, pending: null, variant: 'classic', busy: false };
+const DEFAULT_SKIN = 'assets/default-skin.png';
+const SKIN_ANIMS = { idle: () => new skinview3d.IdleAnimation(), walk: () => new skinview3d.WalkingAnimation(), run: () => new skinview3d.RunningAnimation(), wave: () => new skinview3d.WaveAnimation() };
+
+function skinViewer() {
+  if (skin.viewer || !window.skinview3d) return skin.viewer;
+  const box = $('.skin-stage');
+  const v = new skinview3d.SkinViewer({ canvas: $('#skinCanvas'), width: box.clientWidth || 600, height: box.clientHeight || 520 });
+  v.fov = 40; v.zoom = 0.78; v.autoRotate = true; v.autoRotateSpeed = 0.5;
+  v.animation = SKIN_ANIMS.idle();
+  $('#skinCanvas').addEventListener('pointerdown', () => { v.autoRotate = false; });
+  new ResizeObserver(() => { if (box.clientWidth) v.setSize(box.clientWidth, box.clientHeight); }).observe(box);
+  skin.viewer = v;
+  return v;
+}
+function showSkin(image, variant) {
+  const v = skinViewer();
+  if (v) v.loadSkin(image || DEFAULT_SKIN, { model: variant === 'slim' ? 'slim' : 'default' });
+}
+function skinDirty() {
+  const changed = Boolean(skin.pending) || Boolean(skin.cur?.skin && skin.variant !== skin.cur.skin.variant);
+  $('#skinSave').disabled = !changed || skin.busy || !['microsoft', 'offline'].includes(skin.cur?.type);
+  $('#skinReset').hidden = !changed;
+  $('#skinBadge').hidden = !changed;
+}
+function setVariant(v) {
+  skin.variant = v;
+  $$('#skinModel button').forEach((b) => b.classList.toggle('active', b.dataset.v === v));
+}
+
+function renderSkinPanels() {
+  const c = skin.cur || {};
+  const lic = c.type === 'microsoft';
+  const host = (state.info.config.site || '').replace(/^https?:\/\//, '') || 'сайте NLauncher';
+  $('#skinSub').textContent = c.type === 'none' ? 'Добавьте аккаунт, чтобы менять скин.'
+    : `${c.name} · ${lic ? 'лицензия: скин ставится в ваш аккаунт Minecraft' : `без лицензии: скин хранится на ${host}`}`;
+  $('#skinSave span').textContent = lic ? 'Установить скин' : 'Сохранить скин';
+  // плащи (только лицензия)
+  const capes = c.capes || [];
+  $('#skinCapes').hidden = !lic || !capes.length;
+  const v = skinViewer();
+  const activeCape = capes.find((x) => x.active);
+  if (v) { if (lic && activeCape?.image) v.loadCape(activeCape.image); else v.loadCape(null); }
+  if (lic) {
+    $('#capeList').innerHTML = [`<button class="cape ${activeCape ? '' : 'active'}" data-cape="">Без плаща</button>`,
+      ...capes.map((x) => `<button class="cape ${x.active ? 'active' : ''}" data-cape="${esc(x.id)}">${esc(x.name)}</button>`)].join('');
+  }
+  // как скин попадает на сервера
+  $('#skinServer').hidden = c.type === 'none';
+  if (lic) {
+    $('#skinServerBody').innerHTML = '<p class="muted small">Скин лицензии виден на всех серверах. На серверах без лицензии со <b>SkinsRestorer</b> он подхватится по вашему нику сам.</p>';
+  } else if (c.site) {
+    $('#skinServerBody').innerHTML = `
+      <p class="muted small">На сервере со <b>SkinsRestorer</b> отправьте в чат один раз, и скин увидят все игроки сервера:</p>
+      <button class="cmd-copy" id="skinCmd" data-tip="Скопировать"><code>${esc(c.site.command)}</code><i data-icon="copy"></i></button>
+      <p class="muted small">Если сервер не разрешает ставить скин по ссылке, ваш скин всё равно увидят игроки NLauncher.</p>
+      <div class="row" style="margin-top:10px"><button class="btn ghost sm" id="skinPage"><i data-icon="arrow"></i>Страница скина</button></div>`;
+    hydrateIcons($('#skinServerBody'));
+    $('#skinCmd').onclick = () => { api.copy(c.site.command); toast('Команда скопирована, вставьте её в чат на сервере'); };
+    $('#skinPage').onclick = () => api.openUrl(c.site.page);
+  } else if (c.type === 'offline') {
+    $('#skinServerBody').innerHTML = '<p class="muted small">Выберите и сохраните скин. Здесь появится команда для серверов со SkinsRestorer, а игроки NLauncher будут видеть ваш скин.</p>';
+  }
+  skinDirty();
+}
+
+async function renderSkin() {
+  skinViewer();
+  skin.pending = null;
+  $('#skinSub').textContent = 'Загружаю скин…';
+  const c = await safe(() => api.skin.current(), 'Скин: ');
+  skin.cur = c || { type: 'none' };
+  setVariant(skin.cur.skin?.variant || 'classic');
+  showSkin(skin.cur.skin?.image, skin.variant);
+  renderSkinPanels();
+}
+
+$('#skinAnims').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || !skin.viewer) return;
+  $$('#skinAnims button').forEach((x) => x.classList.toggle('active', x === b));
+  skin.viewer.animation = SKIN_ANIMS[b.dataset.v]();
+});
+$('#skinModel').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  setVariant(b.dataset.v);
+  showSkin(skin.pending?.image || skin.cur?.skin?.image, skin.variant);
+  skinDirty();
+});
+$('#skinPick').addEventListener('click', async () => {
+  const f = await safe(() => api.skin.pick());
+  if (!f) return;
+  skin.pending = f;
+  showSkin(f.image, skin.variant);
+  skinDirty();
+});
+$('#skinReset').addEventListener('click', () => {
+  skin.pending = null;
+  setVariant(skin.cur?.skin?.variant || 'classic');
+  showSkin(skin.cur?.skin?.image, skin.variant);
+  skinDirty();
+});
+$('#skinSave').addEventListener('click', async () => {
+  const png = skin.pending?.png || skin.cur?.skin?.image?.split(',')[1];
+  if (!png) return toast('Сначала выберите PNG со скином', 'warn');
+  skin.busy = true; skinDirty();
+  const label = $('#skinSave span').textContent; $('#skinSave span').textContent = 'Сохраняю…';
+  const r = await safe(() => (skin.cur.type === 'microsoft' ? api.skin.mojang(png, skin.variant) : api.skin.site(png, skin.variant)), 'Скин: ');
+  skin.busy = false; $('#skinSave span').textContent = label;
+  if (r) {
+    skin.cur = { ...skin.cur, ...r };
+    skin.pending = null;
+    toast(skin.cur.type === 'microsoft' ? 'Скин установлен, в игре он появится при следующем входе' : 'Скин сохранён');
+    setVariant(skin.cur.skin?.variant || skin.variant);
+    showSkin(skin.cur.skin?.image, skin.variant);
+    renderSkinPanels();
+  } else skinDirty();
+});
+$('#capeList').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-cape]'); if (!b || b.classList.contains('active')) return;
+  const r = await safe(() => api.skin.cape(b.dataset.cape || null), 'Плащ: ');
+  if (r) { skin.cur = { ...skin.cur, ...r }; renderSkinPanels(); toast(b.dataset.cape ? 'Плащ надет' : 'Плащ снят'); }
+});
 
 /* ---------------- старт ---------------- */
 (async function init() {

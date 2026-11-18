@@ -91,4 +91,22 @@ async function authorization() {
   return mc.mclc();
 }
 
-module.exports = { list, addOffline, addMicrosoft, remove, select, authorization };
+/** Токен Minecraft (для API скинов) для лицензионного аккаунта */
+async function minecraftToken(accountId) {
+  const s = store.read('accounts');
+  const acc = s.list.find((x) => x.id === (accountId || s.active));
+  if (!acc || acc.type !== 'microsoft') throw new Error('Нужен аккаунт с лицензией');
+  const { Auth } = require('msmc');
+  const xbox = await new Auth('select_account').refresh(acc.refresh);
+  const mc = await xbox.getMinecraft();
+  acc.refresh = xbox.save();
+  save(acc);
+  return mc.mcToken;
+}
+
+function active() {
+  const s = store.read('accounts');
+  return s.list.find((x) => x.id === s.active) || null;
+}
+
+module.exports = { list, addOffline, addMicrosoft, remove, select, authorization, minecraftToken, active };

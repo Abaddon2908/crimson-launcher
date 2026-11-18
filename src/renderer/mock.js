@@ -28,6 +28,16 @@ if (!window.api) {
       toggle: async () => [], remove: async () => [], folder: async () => {}, onProgress() {},
     },
     servers: { ping: async (a) => { await wait(400 + Math.random() * 600); return a.includes('example') && !a.startsWith('play') ? { online: false } : { online: true, players: Math.floor(Math.random() * 40000), max: 100000, ping: 30 + Math.floor(Math.random() * 90), version: 'Requires MC 1.8 / 1.21', motd: 'Лучший сервер — заходи!' }; } },
+    skin: (() => {
+      let cur = { type: 'offline', name: 'Notch', skin: null, site: null };
+      return {
+        current: async () => { await wait(300); return cur; },
+        pick: async () => ({ image: 'assets/default-skin.png', png: 'x' }),
+        mojang: async () => cur,
+        cape: async () => cur,
+        site: async (png, variant) => { await wait(500); cur = { ...cur, skin: { image: 'assets/default-skin.png', variant }, site: { url: 'https://nlauncher.ru/skins/479aa701693db3e7.png', page: 'https://nlauncher.ru/skin/Notch', command: `/skin url https://nlauncher.ru/skins/479aa701693db3e7.png${variant === 'slim' ? ' slim' : ''}` } }; return cur; },
+      };
+    })(),
     online: async () => ({ launcherOnline: 1284, serversOnline: 18340, demo: false }),
     feed: async () => ({ banner: { title: 'Здесь будет ваш мониторинг', text: 'Топ серверов, продвижение и рекламные места — прямо в лаунчере.', cta: 'Разместить рекламу', url: '#' }, news: [{ title: 'Лаунчер вышел в бету', date: '2026-11-13', text: 'Лицензия и офлайн, моды через Modrinth, Fabric / Quilt / Forge.' }, { title: 'Мониторинг серверов скоро', date: '2026-11-10', text: 'Голосуйте за любимые сервера и получайте награды.' }], promoted: [{ name: 'Ваш сервер', address: 'play.example.com', tag: 'Промо', ad: true, desc: 'Здесь может быть ваш сервер' }] }),
     game: {

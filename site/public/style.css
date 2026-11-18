@@ -738,3 +738,13 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 .owner-pick > .ic { position: absolute; left: 13px; width: 17px; height: 17px; color: var(--muted); pointer-events: none; }
 .owner-pick .input { flex: 1; min-width: 0; padding-left: 38px; }
 .owner-form + form.inline { margin-top: 10px; }
+/* страница скина */
+.skin-page { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; align-items: center; padding: 30px 0 10px; }
+.skin-stage { position: relative; padding: 0; overflow: hidden; background: radial-gradient(closest-side, rgba(163,69,79,.25), transparent), var(--panel); }
+.skin-stage canvas { display: block; width: 100%; cursor: grab; }
+.skin-ctrl { position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 0 10px; }
+.skin-info h1 { font-size: clamp(30px, 4vw, 46px); margin: 8px 0 6px; overflow-wrap: anywhere; }
+.skin-cmd { margin-top: 18px; }
+.skin-cmd .ip-copy { margin: 10px 0; }
+.skin-cmd code { font-size: 12.5px; overflow-wrap: anywhere; white-space: normal; }
+@media (max-width: 860px) { .skin-page { grid-template-columns: minmax(0, 1fr); } }
