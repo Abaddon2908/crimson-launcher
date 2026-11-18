@@ -745,6 +745,11 @@ app.post('/api/skins', limiter(60 * 60_000, 30), (req, res) => {
   if (r.error) return res.status(r.status).json({ error: r.error });
   res.json({ ...r, url: abs(`/skins/${r.code}.png`), page: abs(`/skin/${r.nick}`), command: skinCommand(r.code, r.variant) });
 });
+app.post('/api/skins/reset', limiter(60 * 60_000, 30), (req, res) => {
+  const r = skins.reset({ nick: req.body?.nick, token: req.body?.token });
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.json({ ok: true });
+});
 app.get('/skins/:code.png', (req, res) => {
   const b = skins.png(req.params.code);
   if (!b) return res.status(404).send('Not found');

@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld('api', {
     pick: () => call('skin:pick'),
     mojang: (png, variant) => call('skin:mojang', png, variant),
     cape: (id) => call('skin:cape', id),
+    reset: () => call('skin:reset'),
     site: (png, variant) => call('skin:site', png, variant),
   },
   game: {

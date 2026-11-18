@@ -111,4 +111,29 @@ async function uploadSite(site, pngBase64, variant) {
   return current(site);
 }
 
-module.exports = { current, readFile, applyMojang, setCape, uploadSite, checkPng };
+/** Сбросить скин: лицензия — стандартный скин аккаунта; без лицензии — убрать скин с сайта */
+async function reset(site) {
+  const acc = auth.active();
+  if (!acc) throw new Error('Нет аккаунта');
+  if (acc.type === 'microsoft') {
+    const token = await auth.minecraftToken(acc.id);
+    const r = await fetch(`${MC}/skins/active`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}`, 'User-Agent': UA } });
+    if (!r.ok) throw new Error(`Сервис Minecraft не сбросил скин (${r.status})`);
+    return { name: acc.name, ...(await profileView(await r.json())) };
+  }
+  const s = store.read('skins');
+  const key = acc.name.toLowerCase();
+  if (s.byNick[key] && site) {
+    const r = await fetch(`${site.replace(/\/$/, '')}/api/skins/reset`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+      body: JSON.stringify({ nick: acc.name, token: s.token }), signal: AbortSignal.timeout(15000),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || `Сайт ответил ${r.status}`);
+  }
+  delete s.byNick[key];
+  store.write('skins', s);
+  return current(site);
+}
+
+module.exports = { reset, current, readFile, applyMojang, setCape, uploadSite, checkPng };

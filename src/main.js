@@ -135,6 +135,7 @@ app.whenReady().then(() => {
   });
   handle('skin:mojang', (png, variant) => core.skins.applyMojang(png, variant));
   handle('skin:cape', (id) => core.skins.setCape(id));
+  handle('skin:reset', () => core.skins.reset(core.config.site));
   handle('skin:site', (png, variant) => core.skins.uploadSite(core.config.site, png, variant));
   createWindow();
 });

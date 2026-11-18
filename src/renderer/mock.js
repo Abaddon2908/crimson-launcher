@@ -35,6 +35,7 @@ if (!window.api) {
         pick: async () => ({ image: 'assets/default-skin.png', png: 'x' }),
         mojang: async () => cur,
         cape: async () => cur,
+        reset: async () => { cur = { ...cur, skin: null, site: null }; return cur; },
         site: async (png, variant) => { await wait(500); cur = { ...cur, skin: { image: 'assets/default-skin.png', variant }, site: { url: 'https://nlauncher.ru/skins/479aa701693db3e7.png', page: 'https://nlauncher.ru/skin/Notch', command: `/skin url https://nlauncher.ru/skins/479aa701693db3e7.png${variant === 'slim' ? ' slim' : ''}` } }; return cur; },
       };
     })(),

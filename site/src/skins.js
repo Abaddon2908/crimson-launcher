@@ -56,8 +56,17 @@ function upload({ nick, variant, png, token }) {
   return { code, token: newToken, nick, variant };
 }
 
+/** Сброс: снять скин с ника (только тот лаунчер, за которым закреплён ник) */
+function reset({ nick, token }) {
+  const owned = byNick(nick);
+  if (!owned) return { ok: true };
+  if (typeof token !== 'string' || sha(token) !== owned.token_hash) return { error: 'Сбросить скин может только лаунчер, который его загрузил', status: 403 };
+  db.prepare('DELETE FROM skin_nicks WHERE nick_lower = ?').run(owned.nick_lower);
+  return { ok: true };
+}
+
 const png = (code) => db.prepare('SELECT png FROM skins WHERE code = ?').get(String(code))?.png || null;
 const byNick = (nick) => (NICK_RE.test(String(nick || '')) ? db.prepare('SELECT * FROM skin_nicks WHERE nick_lower = ?').get(String(nick).toLowerCase()) : null) || null;
 const count = () => db.prepare('SELECT COUNT(*) AS n FROM skin_nicks').get().n;
 
-module.exports = { upload, png, byNick, count, checkPng, NICK_RE };
+module.exports = { reset, upload, png, byNick, count, checkPng, NICK_RE };

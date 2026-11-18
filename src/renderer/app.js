@@ -601,6 +601,7 @@ function renderSkinPanels() {
   $('#skinSub').textContent = c.type === 'none' ? 'Добавьте аккаунт, чтобы менять скин.'
     : `${c.name} · ${lic ? 'лицензия: скин ставится в ваш аккаунт Minecraft' : `без лицензии: скин хранится на ${host}`}`;
   $('#skinSave span').textContent = lic ? 'Установить скин' : 'Сохранить скин';
+  $('#skinClear').hidden = !c.skin || c.type === 'none';
   // плащи (только лицензия)
   const capes = c.capes || [];
   $('#skinCapes').hidden = !lic || !capes.length;
@@ -680,6 +681,25 @@ $('#skinSave').addEventListener('click', async () => {
     showSkin(skin.cur.skin?.image, skin.variant);
     renderSkinPanels();
   } else skinDirty();
+});
+$('#skinClear').addEventListener('click', () => {
+  const lic = skin.cur?.type === 'microsoft';
+  openModal(`<h3>Сбросить скин?</h3>
+    <p class="muted" style="margin:10px 0 18px">${lic ? 'Скин аккаунта вернётся к стандартному. Новый скин можно поставить в любой момент.'
+      : 'Скин удалится с сайта, ник освободится, и игроки NLauncher снова будут видеть стандартного персонажа.<br/><br/>На серверах со SkinsRestorer скин хранится на самом сервере — там отправьте в чат <code>/skin clear</code>.'}</p>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost" data-close>Отмена</button><button class="btn primary" id="skinClearOk"><i data-icon="trash"></i>Сбросить</button></div>`, (m) => {
+    m.querySelector('[data-close]').onclick = closeModal;
+    m.querySelector('#skinClearOk').onclick = async () => {
+      closeModal();
+      const r = await safe(() => api.skin.reset(), 'Скин: ');
+      if (!r) return;
+      skin.cur = r; skin.pending = null;
+      setVariant(r.skin?.variant || 'classic');
+      showSkin(r.skin?.image, skin.variant);
+      renderSkinPanels();
+      if (!lic) { api.copy('/skin clear'); toast('Скин сброшен. Команда /skin clear скопирована для серверов со SkinsRestorer'); } else toast('Скин сброшен на стандартный');
+    };
+  });
 });
 $('#capeList').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cape]'); if (!b || b.classList.contains('active')) return;
