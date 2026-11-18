@@ -14,6 +14,7 @@ const mailer = require('./mailer');
 const skins = require('./skins');
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
+const yookassa = require('./payments/yookassa');
 const { safeUrl, fmt } = require('./views/html');
 const { serverPath, slugify, abs } = require('./seo');
 const V = { pub: require('./views/public'), cab: require('./views/cabinet'), adm: require('./views/admin') };
@@ -586,6 +587,7 @@ function payMethods() {
     m.push({ id: 'yoomoney_card', label: 'Банковская карта', note: 'через ЮMoney', icon: 'card' });
     m.push({ id: 'yoomoney_wallet', label: 'Кошелёк ЮMoney', note: 'оплата с баланса', icon: 'wallet' });
   }
+  if (yookassa.enabled()) m.push({ id: 'yookassa', label: 'Карта, СБП, SberPay', note: 'через ЮKassa', icon: 'card' });
   if (heleket.enabled()) m.push({ id: 'heleket', label: 'Криптовалюта', note: 'USDT, BTC, TON и др. · Heleket', icon: 'coin' });
   return m;
 }
@@ -629,7 +631,7 @@ cab.post('/buy', limiter(60_000, 15), (req, res) => {
     : { t: '', x: '', i: '', u: '' };
   const r = db.prepare(`INSERT INTO orders (user_id, server_id, product_id, kind, title, amount, days, points, color, coupon, discount, provider, banner_title, banner_text, banner_image, banner_url, created)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(req.user.id, server.id, product ? product.id : null, kind, title, withCoupon.amount, days, points, color,
-    c.coupon ? c.coupon.code : '', packOff + withCoupon.off, method.startsWith('yoomoney') ? 'yoomoney' : 'heleket', banner.t, banner.x, banner.i, banner.u, now());
+    c.coupon ? c.coupon.code : '', packOff + withCoupon.off, method.startsWith('yoomoney') ? 'yoomoney' : method, banner.t, banner.x, banner.i, banner.u, now());
   res.redirect(`/cabinet/pay/${r.lastInsertRowid}?m=${method}`);
 });
 
@@ -642,8 +644,14 @@ cab.get('/coupon', (req, res) => {
 cab.get('/pay/:id', async (req, res) => {
   const o = db.prepare(`SELECT * FROM orders WHERE id = ? AND user_id = ? AND status = 'pending'`).get(int(req.params.id), req.user.id);
   if (!o) return res.redirect('/cabinet/orders');
-  const m = str(req.query.m) || (o.provider === 'heleket' ? 'heleket' : 'yoomoney_card');
+  const m = str(req.query.m) || (['heleket', 'yookassa'].includes(o.provider) ? o.provider : 'yoomoney_card');
   try {
+    if (m === 'yookassa' && yookassa.enabled()) {
+      const p = await yookassa.createPayment(o, req.user.email);
+      if (!p.url) throw new Error('ЮKassa не вернула ссылку на оплату');
+      db.prepare(`UPDATE orders SET provider = 'yookassa', provider_ref = ? WHERE id = ?`).run(p.ref, o.id);
+      return res.redirect(p.url);
+    }
     if (m === 'heleket' && heleket.enabled()) {
       const inv = await heleket.createInvoice(o);
       db.prepare(`UPDATE orders SET provider = 'heleket', provider_ref = ? WHERE id = ?`).run(inv.ref, o.id);
@@ -668,6 +676,7 @@ app.use('/cabinet', cab);
 function applyPayment(orderId, provider, ref, paidAmount) {
   const o = db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId);
   if (!o) return console.warn(`[pay] неизвестный заказ ${orderId}`);
+  if (o.status === 'paid') return; // повторное уведомление платёжки — заказ уже оплачен
   if (o.status === 'cancelled') return console.warn(`[pay] оплата отменённого заказа ${orderId} — проверьте вручную`);
   if (paidAmount != null && paidAmount + 0.01 < o.amount) return console.warn(`[pay] заказ ${orderId}: оплачено ${paidAmount} < ${o.amount}`);
   markPaid(orderId, provider, ref);
@@ -681,6 +690,14 @@ app.post('/pay/yoomoney/notify', (req, res) => {
   res.status(200).end();
 });
 
+app.post('/pay/yookassa/webhook', async (req, res) => {
+  try {
+    const v = await yookassa.verify(req.body);
+    if (!v) { console.warn('[yookassa] уведомление не подтвердилось запросом к API'); return res.status(400).end(); }
+    if (v.paid) applyPayment(v.orderId, 'yookassa', v.ref, v.paidAmount);
+    res.status(200).end(); // ЮKassa ждёт 200, иначе повторяет уведомление
+  } catch (e) { console.error('[yookassa]', e.message); res.status(500).end(); }
+});
 app.post('/pay/heleket/webhook', async (req, res) => {
   const v = await heleket.verify(req.body);
   if (!v) { console.warn('[heleket] неверная подпись вебхука'); return res.status(400).end(); }
@@ -1285,15 +1302,15 @@ adm.get('/log', (req, res) => {
 });
 
 /* ---- настройки ---- */
-const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'mail_from'];
+const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yookassa_shop_id', 'yookassa_secret', 'yookassa_vat_code', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'mail_from'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
-  send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));
+  send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yookassa: `${site}/pay/yookassa/webhook`, yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));
 });
 adm.post('/settings', (req, res) => {
   // флажки: если галочка снята, браузер поле не отправляет — поэтому выставляем явно
-  for (const k of ['show_launcher_online', 'demo_stats']) req.body[k] = req.body[k] ? '1' : '0';
-  const changed = [...SETTING_KEYS, 'show_launcher_online', 'demo_stats'].filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));
+  for (const k of ['show_launcher_online', 'demo_stats', 'yookassa_receipt']) req.body[k] = req.body[k] ? '1' : '0';
+  const changed = [...SETTING_KEYS, 'show_launcher_online', 'demo_stats', 'yookassa_receipt'].filter((k) => k in req.body && settings.get(k) !== str(req.body[k], 300));
   for (const k of changed) settings.set(k, str(req.body[k], 300));
   if (changed.includes('demo_stats')) audit(req, req.body.demo_stats === '1' ? 'Включил демо-статистику (видна только админам)' : 'Выключил демо-статистику', '');
   if (changed.length) audit(req, 'Изменил настройки', changed.map((k) => (/secret|key|pass/.test(k) ? `${k} (скрыто)` : k)).join(', '));

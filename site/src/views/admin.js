@@ -428,6 +428,13 @@ function settingsPage(req, { s, flash, hooks }) {
         ${f('yoomoney_secret', 'Секрет для уведомлений', '', 'password')}
         <p class="muted small">В ЮMoney: <a class="link" href="https://yoomoney.ru/transfer/myservices/http-notification" target="_blank" rel="noopener">HTTP-уведомления</a> → адрес: <code>${hooks.yoomoney}</code></p>
       </div>
+      <div class="card pad"><h3>ЮKassa</h3>
+        ${f('yookassa_shop_id', 'shopId', '123456')}
+        ${f('yookassa_secret', 'Секретный ключ', 'live_…', 'password')}
+        <label class="check"><input type="checkbox" name="yookassa_receipt" ${s.yookassa_receipt === '1' ? 'checked' : ''} /> Передавать чек (54-ФЗ)</label>
+        ${f('yookassa_vat_code', 'Код НДС для чека', '1 — без НДС', 'number')}
+        <p class="muted small">Ключи: личный кабинет ЮKassa → Интеграция → Ключи API. Там же → <b>HTTP-уведомления</b>: адрес <code>${hooks.yookassa}</code>, событие <code>payment.succeeded</code>.<br/>Галочку «чек» ставьте, если в ЮKassa подключена отправка чеков: тогда чек уходит на email покупателя. Код НДС: 1 — без НДС (обычно для ИП на УСН и самозанятых).</p>
+      </div>
       <div class="card pad"><h3>Heleket (криптовалюта)</h3>
         ${f('heleket_merchant', 'UUID мерчанта')}
         ${f('heleket_api_key', 'Payment API key', '', 'password')}

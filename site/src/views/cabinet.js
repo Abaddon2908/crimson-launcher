@@ -7,7 +7,7 @@ const { GROUPS, VERSIONS } = require('../tags');
 
 const STATUS = { pending: ['На модерации', 'warn'], approved: ['Опубликован', 'ok'], rejected: ['Отклонён', 'bad'] };
 const ORDER = { pending: ['Ожидает оплаты', 'warn'], paid: ['Оплачен', 'ok'], cancelled: ['Отменён', 'bad'] };
-const PROVIDER = { yoomoney: 'ЮMoney', heleket: 'Heleket (крипто)', manual: 'Вручную' };
+const PROVIDER = { yoomoney: 'ЮMoney', yookassa: 'ЮKassa', heleket: 'Heleket (крипто)', manual: 'Вручную' };
 
 function tabs(req, active) {
   const t = (href, label, ic) => html`<a class="${active === href ? 'active' : ''}" href="${href}">${icon(ic)}${label}</a>`;
