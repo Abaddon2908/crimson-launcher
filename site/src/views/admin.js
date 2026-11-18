@@ -154,7 +154,7 @@ function serverDetail(req, { s, owner, services, orders, votes, voteStats, flash
           <form class="owner-form" method="post" action="/admin/servers/${s.id}/owner">${csrfField(req)}
             <label class="field"><span>${owner ? 'Передать другому пользователю' : 'Назначить владельца'}</span>
               <div class="owner-pick">
-                ${icon('users')}<input class="input" name="user" id="ownerInput" list="ownerList" autocomplete="off" placeholder="Начните вводить email или имя…" required />
+                ${icon('users')}<input class="input" name="user" id="ownerInput" list="ownerList" autocomplete="off" placeholder="Начните вводить email…" required />
                 <datalist id="ownerList"></datalist>
                 <button class="btn primary sm">${owner ? 'Передать' : 'Назначить'}</button>
               </div>
