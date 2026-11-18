@@ -84,7 +84,7 @@ function runGame(inst, timeoutMs = 15 * 60 * 1000) {
   }
 
   // мод скинов CustomSkinLoader и источник nlauncher.ru в сборках с модлоадером
-  for (const [key, inst] of [['fabric', fab], ...instances.list().filter((i) => ['quilt', 'forge'].includes(i.loader)).map((i) => [i.loader, i])]) {
+  for (const [key, inst] of [['fabric', fab], ...instances.all().filter((i) => ['quilt', 'forge'].includes(i.loader)).map((i) => [i.loader, i])]) {
     if (only && only !== key) continue;
     try {
       const dir = paths.instance(inst.id);
