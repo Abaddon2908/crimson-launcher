@@ -20,6 +20,7 @@ const versions = require(path.join(C, 'versions'));
 const mods = require(path.join(C, 'mods'));
 const servers = require(path.join(C, 'servers'));
 const launch = require(path.join(C, 'launch'));
+const paths = require(path.join(C, 'paths'));
 
 const results = [];
 const ok = (name, detail = '') => { results.push({ name, ok: true, detail }); console.log(`✅ ${name} ${detail}`); };
@@ -80,6 +81,20 @@ function runGame(inst, timeoutMs = 15 * 60 * 1000) {
     try { const line = await runGame(inst); ok(`запуск ${inst.name}`, `${Math.round((Date.now() - t0) / 1000)}с — ${line.slice(-60)}`); }
     catch (e) { fail(`запуск ${inst.name}`, e); }
     await new Promise((r) => setTimeout(r, 3000));
+  }
+
+  // мод скинов CustomSkinLoader и источник nlauncher.ru в сборках с модлоадером
+  for (const [key, inst] of [['fabric', fab], ...instances.list().filter((i) => ['quilt', 'forge'].includes(i.loader)).map((i) => [i.loader, i])]) {
+    if (only && only !== key) continue;
+    try {
+      const dir = paths.instance(inst.id);
+      const jar = fs.readdirSync(path.join(dir, 'mods')).find((f) => /customskinloader/i.test(f));
+      if (!jar) throw new Error('мод не установлен');
+      const src = path.join(dir, 'CustomSkinLoader');
+      const cfg = ['CustomSkinLoader.json', 'ExtraList/NLauncher.json'].map((f) => { try { return fs.readFileSync(path.join(src, f), 'utf8'); } catch { return ''; } }).join('');
+      if (!cfg.includes('/skinapi/')) throw new Error('нет источника скинов NLauncher');
+      ok(`скины ${inst.name}`, `${jar}${fs.existsSync(path.join(src, 'ExtraList', 'NLauncher.json')) ? ' · источник ждёт в ExtraList' : ' · источник в CustomSkinLoader.json'}`);
+    } catch (e) { fail(`скины ${inst.name}`, e); }
   }
 
   const md = ['| Проверка | Итог | Детали |', '|---|---|---|', ...results.map((r) => `| ${r.name} | ${r.ok ? '✅' : '❌'} | ${r.detail.split('\n')[0].replace(/\|/g, '/').slice(0, 140)} |`)].join('\n');
