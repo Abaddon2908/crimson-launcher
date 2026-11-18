@@ -120,8 +120,10 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
   <meta name="theme-color" content="#0c0a0b" />
   ${verify('yandex-verification', s.yandex_verification)}
   ${verify('google-site-verification', s.google_verification)}
-  <link rel="icon" type="image/svg+xml" href="/assets/logo-mark.svg" />
+  <link rel="icon" href="/favicon.ico" sizes="48x48" />
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png" />
   <link rel="manifest" href="/site.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -135,7 +137,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
   <div class="bg" aria-hidden="true"><div class="bg-img"></div></div>
   <header class="top">
     <div class="wrap top-in">
-      <a href="/" class="brand"><img class="logo" src="/assets/logo-mark.svg" alt="" /><span><b>${site}</b><small>Мониторинг серверов Minecraft</small></span></a>
+      <a href="/" class="brand"><img class="logo" src="/assets/logo-mark.png" alt="" /><span><b>${site}</b><small>Мониторинг серверов Minecraft</small></span></a>
       <nav class="nav">
         ${nav('/', 'Топ серверов')}
         ${nav('/servera/', 'Подборки')}
@@ -171,7 +173,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
     <button class="sup-fab" id="supFab" type="button" aria-expanded="false" aria-controls="supPanel">${icon('chat')}<span>Поддержка</span><i class="sup-dot" id="supDot" hidden></i></button>
     <div class="sup-panel" id="supPanel" role="dialog" aria-label="Поддержка" hidden>
       <div class="sup-head">
-        <img class="logo" src="/assets/logo-mark.svg" alt="" />
+        <img class="logo" src="/assets/logo-mark.png" alt="" />
         <div><b>Поддержка ${site}</b><small>Обычно отвечаем в течение дня</small></div>
         <button class="sup-x" id="supClose" type="button" aria-label="Закрыть">${icon('x')}</button>
       </div>

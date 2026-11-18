@@ -8,6 +8,7 @@ let win;
 
 function createWindow() {
   win = new BrowserWindow({
+    icon: path.join(__dirname, 'renderer', 'assets', 'icon-256.png'), // окно и панель задач (в установленной версии — иконка exe)
     width: 1180,
     height: 720,
     minWidth: 980,
