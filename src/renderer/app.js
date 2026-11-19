@@ -54,6 +54,7 @@ function go(page) {
   if (page === 'servers') renderServers();
   if (page === 'instances') renderInstances();
   if (page === 'skin') renderSkin();
+  if (page !== 'skin' && editor?.state.on) leaveEditor(false);
 }
 $$('.nav-btn').forEach((b) => b.addEventListener('click', () => go(b.dataset.page)));
 document.addEventListener('click', (e) => { const g = e.target.closest('[data-goto]'); if (g) go(g.dataset.goto); });
@@ -650,7 +651,8 @@ $('#skinAnims').addEventListener('click', (e) => {
 $('#skinModel').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
   setVariant(b.dataset.v);
-  showSkin(skin.pending?.image || skin.cur?.skin?.image, skin.variant);
+  if (editor?.state.on) editor.set('model', skin.variant === 'slim' ? 'slim' : 'default');
+  else showSkin(skin.pending?.image || skin.cur?.skin?.image, skin.variant);
   skinDirty();
 });
 $('#skinPick').addEventListener('click', async () => {
@@ -701,6 +703,88 @@ $('#skinClear').addEventListener('click', () => {
     };
   });
 });
+/* ---------- редактор скина ---------- */
+const PALETTE = ['#f2e9ea', '#1b1416', '#d6aa8c', '#b07a5a', '#6b4430', '#3a221e', '#c4747c', '#a3454f', '#5b232a', '#6f8fbf', '#3d5a8a', '#6fbf8e', '#2f7a4c', '#d6a764', '#8a6a3a', '#9b8f91'];
+let editor = null;
+function edSync() {
+  const s = editor.state;
+  $$('#edTools [data-tool]').forEach((b) => b.classList.toggle('active', b.dataset.tool === s.tool));
+  $$('#edTools [data-size]').forEach((b) => b.classList.toggle('active', Number(b.dataset.size) === s.size));
+  $$('#edLayer button').forEach((b) => b.classList.toggle('active', b.dataset.v === s.layer));
+  $('#edUndo').disabled = !s.canUndo; $('#edRedo').disabled = !s.canRedo;
+  $('#edColor').value = s.color; $('#edColorHex').textContent = s.color;
+  $$('#edPalette button').forEach((b) => b.classList.toggle('active', b.dataset.c === s.color));
+}
+function setEditMode(on) {
+  $$('#skinMode button').forEach((b) => b.classList.toggle('active', b.dataset.v === (on ? 'edit' : 'view')));
+  ['#edTools', '#edViews', '#edHint', '#edPanel'].forEach((s) => ($(s).hidden = !on));
+  $('#skinAnims').hidden = on;
+  $$('.skin-side > .set-card:not(#edPanel)').forEach((c) => c.classList.toggle('ed-hidden', on));
+  if (!on && skin.viewer) {
+    editor?.stop();
+    $$('#skinAnims button').forEach((x) => x.classList.toggle('active', x.dataset.v === 'idle'));
+    skin.viewer.animation = SKIN_ANIMS.idle(); skin.viewer.autoRotate = true;
+    $$('#edParts button').forEach((b) => b.classList.add('active'));
+  }
+}
+async function enterEditor(fromTemplate) {
+  const v = skinViewer(); if (!v) return;
+  if (!editor) {
+    editor = SkinEditor.create(v);
+    editor.onChange((e) => { if (e.warn) toast(e.warn, 'warn'); edSync(); });
+    $('#edPalette').innerHTML = PALETTE.map((c) => `<button data-c="${c}" style="background:${c}" data-tip="${c}"></button>`).join('');
+  }
+  setEditMode(true);
+  const src = fromTemplate ? DEFAULT_SKIN : (skin.pending?.image || skin.cur?.skin?.image || DEFAULT_SKIN);
+  await editor.start(src, skin.variant === 'slim' ? 'slim' : 'default');
+  editor.set('grid', $('#edGrid').checked); editor.set('mirror', $('#edMirror').checked);
+  edSync();
+}
+$('#skinMode').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.v === 'edit' && !editor?.state.on) enterEditor(false);
+  if (b.dataset.v === 'view' && editor?.state.on) leaveEditor(false);
+});
+function leaveEditor(apply) {
+  if (apply) {
+    const r = editor.result();
+    skin.pending = r;
+    toast('Скин готов, нажмите «Сохранить скин», чтобы установить его');
+  }
+  setEditMode(false);
+  showSkin(skin.pending?.image || skin.cur?.skin?.image, skin.variant);
+  skinDirty();
+}
+$('#edTools').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b || !editor) return;
+  if (b.dataset.tool) editor.set('tool', b.dataset.tool);
+  if (b.dataset.size) editor.set('size', Number(b.dataset.size));
+  if (b.id === 'edUndo') editor.undo();
+  if (b.id === 'edRedo') editor.redo();
+});
+document.addEventListener('keydown', (e) => {
+  if (!editor?.state.on || e.ctrlKey || e.metaKey || e.target.closest?.('input, textarea')) return;
+  const t = { KeyB: 'brush', KeyE: 'eraser', KeyG: 'fill', KeyI: 'pick' }[e.code];
+  if (t) editor.set('tool', t);
+});
+$('#edViews').addEventListener('click', (e) => { const b = e.target.closest('[data-view]'); if (b && editor) editor.view(Number(b.dataset.view)); });
+$('#edColor').addEventListener('input', (e) => editor.set('color', e.target.value));
+$('#edPalette').addEventListener('click', (e) => { const b = e.target.closest('[data-c]'); if (b) { editor.set('color', b.dataset.c); if (editor.state.tool === 'eraser' || editor.state.tool === 'pick') editor.set('tool', 'brush'); } });
+$('#edLayer').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) editor.set('layer', b.dataset.v); });
+$('#edGrid').addEventListener('change', (e) => editor.set('grid', e.target.checked));
+$('#edMirror').addEventListener('change', (e) => editor.set('mirror', e.target.checked));
+$('#edParts').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-part]'); if (!b) return;
+  b.classList.toggle('active'); editor.part(b.dataset.part, b.classList.contains('active'));
+});
+$('#edClearOuter').addEventListener('click', () => editor.clearOuter());
+$('#edTemplate').addEventListener('click', () => enterEditor(true));
+$('#edDone').addEventListener('click', () => leaveEditor(true));
+$('#edCancel').addEventListener('click', () => leaveEditor(false));
+$('#edDownload').addEventListener('click', () => {
+  const a = document.createElement('a'); a.href = editor.result().image; a.download = `${skin.cur?.name || 'skin'}.png`; a.click();
+});
+
 $('#capeList').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cape]'); if (!b || b.classList.contains('active')) return;
   const r = await safe(() => api.skin.cape(b.dataset.cape || null), 'Плащ: ');

@@ -146,6 +146,7 @@
       <section class="page" id="page-skin">
         <div class="page-head">
           <div><h2>Скин</h2><p class="muted" id="skinSub">Предпросмотр в 3D и установка скина.</p></div>
+          <div class="seg" id="skinMode"><button class="active" data-v="view">Просмотр</button><button data-v="edit"><i data-icon="edit"></i>Редактор</button></div>
         </div>
         <div class="skin-wrap">
           <div class="skin-stage glass">
@@ -157,6 +158,22 @@
               <button data-v="wave">Машет</button>
             </div>
             <span class="skin-badge" id="skinBadge" hidden>Не сохранено</span>
+            <div class="ed-tools glass" id="edTools" hidden>
+              <button class="active" data-tool="brush" data-tip="Кисть (B)"><i data-icon="brush"></i></button>
+              <button data-tool="eraser" data-tip="Ластик — только второй слой (E)"><i data-icon="eraser"></i></button>
+              <button data-tool="fill" data-tip="Заливка грани (G)"><i data-icon="bucket"></i></button>
+              <button data-tool="pick" data-tip="Пипетка (I)"><i data-icon="pipette"></i></button>
+              <span class="ed-sep"></span>
+              <button data-size="1" class="active" data-tip="Кисть 1×1">1</button>
+              <button data-size="2" data-tip="Кисть 2×2">2</button>
+              <span class="ed-sep"></span>
+              <button id="edUndo" data-tip="Отменить (Ctrl+Z)" disabled><i data-icon="undo"></i></button>
+              <button id="edRedo" data-tip="Повторить (Ctrl+Y)" disabled><i data-icon="redo"></i></button>
+            </div>
+            <div class="ed-views" id="edViews" hidden>
+              <button data-view="0">Спереди</button><button data-view="90">Справа</button><button data-view="180">Сзади</button><button data-view="-90">Слева</button>
+            </div>
+            <p class="ed-hint" id="edHint" hidden>ЛКМ — рисовать · ПКМ — вращать · колесо — приблизить</p>
           </div>
           <div class="skin-side">
             <div class="set-card glass">
@@ -171,6 +188,32 @@
                 <button class="btn ghost" id="skinReset" hidden>Отменить</button>
               </div>
               <button class="link-btn" id="skinClear" hidden>Сбросить скин на стандартный</button>
+            </div>
+            <div class="set-card glass ed-panel" id="edPanel" hidden>
+              <h4>Цвет</h4>
+              <div class="row" style="margin-top:8px"><input type="color" id="edColor" value="#c4747c" /><span class="muted small" id="edColorHex">#c4747c</span></div>
+              <div class="ed-palette" id="edPalette"></div>
+              <h4 style="margin-top:14px">Рисую на слое</h4>
+              <div class="seg" id="edLayer" style="margin-top:8px"><button class="active" data-v="inner">Основной</button><button data-v="outer" data-tip="Шапка, куртка, рукава поверх основного">Второй слой</button></div>
+              <h4 style="margin-top:14px">Вид</h4>
+              <div class="ed-toggles">
+                <label class="switch-row"><span>Сетка пикселей</span><label class="switch"><input type="checkbox" id="edGrid" checked /><span></span></label></label>
+                <label class="switch-row"><span>Зеркально (левая ↔ правая сторона)</span><label class="switch"><input type="checkbox" id="edMirror" /><span></span></label></label>
+              </div>
+              <div class="ed-parts" id="edParts" data-tip="Скройте часть тела, чтобы дорисовать закрытые места — например, внутреннюю сторону руки">
+                <button class="active" data-part="head">Голова</button><button class="active" data-part="body">Туловище</button>
+                <button class="active" data-part="rightArm">Пр. рука</button><button class="active" data-part="leftArm">Лев. рука</button>
+                <button class="active" data-part="rightLeg">Пр. нога</button><button class="active" data-part="leftLeg">Лев. нога</button>
+              </div>
+              <div class="row wrap" style="margin-top:10px">
+                <button class="btn ghost sm" id="edClearOuter">Очистить второй слой</button>
+                <button class="btn ghost sm" id="edTemplate">С шаблона</button>
+              </div>
+              <div class="row" style="margin-top:14px">
+                <button class="btn primary" id="edDone"><i data-icon="check"></i>Готово</button>
+                <button class="btn ghost" id="edDownload"><i data-icon="download"></i>PNG</button>
+                <button class="btn ghost" id="edCancel">Отмена</button>
+              </div>
             </div>
             <div class="set-card glass" id="skinCapes" hidden>
               <h4>Плащ</h4>
@@ -265,6 +308,7 @@
   <div class="toasts" id="toasts"></div>
 
   <script src="vendor/skinview3d.bundle.js"></script>
+  <script src="skin-editor.js"></script>
   <script src="mock.js"></script>
   <script src="icons.js"></script>
   <script src="dropdown.js"></script>
