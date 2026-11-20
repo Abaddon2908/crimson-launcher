@@ -198,6 +198,7 @@ const DEFAULT_SETTINGS = {
   yoomoney_secret: '',
   heleket_merchant: '',
   heleket_api_key: '',
+  heleket_api_host: 'api.heleket.hk',
   default_banner_title: 'Здесь может быть ваш сервер',
   default_banner_text: 'Баннер на главной NLauncher — тысячи игроков видят его при каждом запуске.',
 };

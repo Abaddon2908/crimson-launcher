@@ -438,7 +438,8 @@ function settingsPage(req, { s, flash, hooks }) {
       <div class="card pad"><h3>Heleket (криптовалюта)</h3>
         ${f('heleket_merchant', 'UUID мерчанта')}
         ${f('heleket_api_key', 'Payment API key', '', 'password')}
-        <p class="muted small">Вебхук: <code>${hooks.heleket}</code> (передаётся автоматически при создании счёта)</p>
+        ${f('heleket_api_host', 'Адрес API', 'api.heleket.hk')}
+        <p class="muted small">Вебхук: <code>${hooks.heleket}</code> (передаётся автоматически при создании счёта).<br/>Адрес API: <code>api.heleket.hk</code> — запасной домен Heleket, он работает из России. Если Heleket сообщит о новом адресе, поменяйте здесь.</p>
       </div>
       <div class="card pad"><h3>NLauncher</h3>
         <p class="muted small">Лента для лаунчера (уже прописана в NLauncher):</p>

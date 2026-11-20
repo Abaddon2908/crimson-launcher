@@ -1302,7 +1302,7 @@ adm.get('/log', (req, res) => {
 });
 
 /* ---- настройки ---- */
-const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'yookassa_shop_id', 'yookassa_secret', 'yookassa_vat_code', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'mail_from'];
+const SETTING_KEYS = ['site_name', 'site_url', 'default_banner_title', 'default_banner_text', 'yoomoney_wallet', 'yoomoney_secret', 'heleket_merchant', 'heleket_api_key', 'heleket_api_host', 'yookassa_shop_id', 'yookassa_secret', 'yookassa_vat_code', 'yandex_metrika_id', 'google_analytics_id', 'yandex_verification', 'google_verification', 'vote_cooldown_hours', 'points_price', 'points_label', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'mail_from'];
 adm.get('/settings', (req, res) => {
   const site = settings.get('site_url').replace(/\/$/, '');
   send(res, V.adm.settingsPage(req, { s: settings.all(), flash: flashOf(req), hooks: { yookassa: `${site}/pay/yookassa/webhook`, yoomoney: `${site}/pay/yoomoney/notify`, heleket: `${site}/pay/heleket/webhook`, feed: `${site}/api/launcher/feed.json`, sitemap: `${site}/sitemap.xml`, robots: `${site}/robots.txt` } }));

@@ -5,7 +5,8 @@ const crypto = require('crypto');
 const { settings } = require('../db');
 const { request } = require('./net');
 
-const API = 'https://api.heleket.com/v1';
+// основной домен api.heleket.com бывает недоступен из РФ — по умолчанию запасной api.heleket.hk (меняется в админке)
+const api = () => `https://${(settings.get('heleket_api_host') || 'api.heleket.hk').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '')}/v1`;
 const enabled = () => Boolean(settings.get('heleket_merchant') && settings.get('heleket_api_key'));
 
 // Подпись: md5( base64( json_body ) + API_KEY ). PHP json_encode экранирует "/" — учитываем оба варианта.
@@ -13,7 +14,7 @@ const signOf = (json, key) => crypto.createHash('md5').update(Buffer.from(json).
 
 async function call(path, payload) {
   const body = JSON.stringify(payload);
-  const res = await request('Heleket', `${API}${path}`, {
+  const res = await request('Heleket', `${api()}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', merchant: settings.get('heleket_merchant'), sign: signOf(body, settings.get('heleket_api_key')) },
     body,
