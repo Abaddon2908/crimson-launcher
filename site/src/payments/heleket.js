@@ -3,6 +3,7 @@
 //   - вебхук приходит на {SITE_URL}/pay/heleket/webhook
 const crypto = require('crypto');
 const { settings } = require('../db');
+const { request } = require('./net');
 
 const API = 'https://api.heleket.com/v1';
 const enabled = () => Boolean(settings.get('heleket_merchant') && settings.get('heleket_api_key'));
@@ -12,7 +13,7 @@ const signOf = (json, key) => crypto.createHash('md5').update(Buffer.from(json).
 
 async function call(path, payload) {
   const body = JSON.stringify(payload);
-  const res = await fetch(`${API}${path}`, {
+  const res = await request('Heleket', `${API}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', merchant: settings.get('heleket_merchant'), sign: signOf(body, settings.get('heleket_api_key')) },
     body,
