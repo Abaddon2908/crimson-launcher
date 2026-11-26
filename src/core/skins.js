@@ -17,7 +17,8 @@ function checkPng(buf) {
 const dataUrl = (buf) => `data:image/png;base64,${buf.toString('base64')}`;
 
 async function fetchPng(url) {
-  const r = await fetch(url.replace(/^http:/, 'https:'), { headers: { 'User-Agent': UA } });
+  // текстуры Mojang отдаются по http — забираем по https; остальные адреса как есть
+  const r = await fetch(url.replace(/^http:\/\/textures\.minecraft\.net\//, 'https://textures.minecraft.net/'), { headers: { 'User-Agent': UA } });
   if (!r.ok) throw new Error(`Не удалось загрузить скин (${r.status})`);
   return Buffer.from(await r.arrayBuffer());
 }
@@ -51,6 +52,8 @@ async function current(site) {
     type: 'offline', name: acc.name,
     skin: saved ? { image: `data:image/png;base64,${saved.png}`, variant: saved.variant } : null,
     site: saved ? { url: saved.url, page: saved.page, command: saved.command } : null,
+    cape: saved?.cape || null,
+    capeImage: saved?.capePng ? `data:image/png;base64,${saved.capePng}` : null,
     siteBase: site,
   };
 }
@@ -91,7 +94,7 @@ async function setCape(capeId) {
 }
 
 /** Без лицензии: загрузить скин на сайт мониторинга под ником активного аккаунта */
-async function uploadSite(site, pngBase64, variant) {
+async function uploadSite(site, pngBase64, variant, cape) {
   const acc = auth.active();
   if (!acc || acc.type !== 'offline') throw new Error('Нужен аккаунт без лицензии');
   if (!site) throw new Error('В настройках лаунчера не указан сайт');
@@ -100,13 +103,59 @@ async function uploadSite(site, pngBase64, variant) {
   const r = await fetch(`${site.replace(/\/$/, '')}/api/skins`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
-    body: JSON.stringify({ nick: acc.name, variant, png: pngBase64, token: s.token || undefined }),
+    body: JSON.stringify({ nick: acc.name, variant, png: pngBase64, token: s.token || undefined, cape: cape || null }),
     signal: AbortSignal.timeout(15000),
   });
   const d = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(d.error || `Сайт ответил ${r.status}`);
   s.token = d.token; // один секрет на этот компьютер: им закреплены ники
-  s.byNick[acc.name.toLowerCase()] = { png: pngBase64, variant: d.variant, url: d.url, page: d.page, command: d.command, code: d.code };
+  const capePng = d.cape && d.capeUrl ? (await fetchPng(d.capeUrl).catch(() => null))?.toString('base64') || null : null;
+  s.byNick[acc.name.toLowerCase()] = { png: pngBase64, variant: d.variant, url: d.url, page: d.page, command: d.command, code: d.code, cape: d.cape || null, capePng };
+  store.write('skins', s);
+  return current(site);
+}
+
+const siteBase = (site) => { if (!site) throw new Error('В настройках лаунчера не указан сайт'); return site.replace(/\/$/, ''); };
+async function siteJson(url) {
+  const r = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15000) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `Сайт ответил ${r.status}`);
+  return d;
+}
+
+/** Каталог скинов с сайта: { cat, style, q, page } */
+function catalog(site, p = {}) {
+  const q = new URLSearchParams();
+  for (const k of ['cat', 'style', 'q', 'page']) if (p[k]) q.set(k, String(p[k]));
+  q.set('per', '36');
+  return siteJson(`${siteBase(site)}/api/skins/catalog?${q}`);
+}
+/** Плащи NLauncher (для игроков без лицензии) */
+const capes = (site) => siteJson(`${siteBase(site)}/api/capes`);
+
+/** Скачать выбранный скин (и плащ) из каталога для предпросмотра */
+async function catalogGet(url, capeUrl) {
+  const buf = await fetchPng(url);
+  checkPng(buf);
+  const cape = capeUrl ? await fetchPng(capeUrl).catch(() => null) : null;
+  return { image: dataUrl(buf), png: buf.toString('base64'), capeImage: cape ? dataUrl(cape) : null };
+}
+
+/** Без лицензии: надеть плащ NLauncher (код) или снять (null) — скин уже должен быть на сайте */
+async function siteCape(site, code) {
+  const acc = auth.active();
+  if (!acc || acc.type !== 'offline') throw new Error('Плащи NLauncher — для аккаунтов без лицензии');
+  const s = store.read('skins');
+  const saved = s.byNick[acc.name.toLowerCase()];
+  if (!saved) throw new Error('Сначала сохраните скин');
+  const r = await fetch(`${siteBase(site)}/api/skins/cape`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+    body: JSON.stringify({ nick: acc.name, token: s.token, cape: code || null }), signal: AbortSignal.timeout(15000),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || `Сайт ответил ${r.status}`);
+  saved.cape = d.cape || null;
+  saved.capePng = d.capeUrl ? (await fetchPng(d.capeUrl).catch(() => null))?.toString('base64') || null : null;
   store.write('skins', s);
   return current(site);
 }
@@ -136,4 +185,4 @@ async function reset(site) {
   return current(site);
 }
 
-module.exports = { reset, current, readFile, applyMojang, setCape, uploadSite, checkPng };
+module.exports = { catalog, capes, catalogGet, siteCape, reset, current, readFile, applyMojang, setCape, uploadSite, checkPng };

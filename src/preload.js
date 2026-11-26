@@ -51,7 +51,11 @@ contextBridge.exposeInMainWorld('api', {
     mojang: (png, variant) => call('skin:mojang', png, variant),
     cape: (id) => call('skin:cape', id),
     reset: () => call('skin:reset'),
-    site: (png, variant) => call('skin:site', png, variant),
+    site: (png, variant, cape) => call('skin:site', png, variant, cape),
+    catalog: (p) => call('skin:catalog', p),
+    capes: () => call('skin:capes'),
+    catalogGet: (url, capeUrl) => call('skin:catalogGet', url, capeUrl),
+    siteCape: (code) => call('skin:siteCape', code),
   },
   game: {
     launch: (id, server) => call('game:launch', id, server),

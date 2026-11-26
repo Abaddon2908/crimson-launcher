@@ -146,7 +146,7 @@
       <section class="page" id="page-skin">
         <div class="page-head">
           <div><h2>Скин</h2><p class="muted" id="skinSub">Предпросмотр в 3D и установка скина.</p></div>
-          <div class="seg" id="skinMode"><button class="active" data-v="view">Просмотр</button><button data-v="edit"><i data-icon="edit"></i>Редактор</button></div>
+          <div class="seg" id="skinMode"><button class="active" data-v="view">Просмотр</button><button data-v="catalog"><i data-icon="grid"></i>Каталог</button><button data-v="edit"><i data-icon="edit"></i>Редактор</button></div>
         </div>
         <div class="skin-wrap">
           <div class="skin-stage glass">
@@ -215,9 +215,26 @@
                 <button class="btn ghost" id="edCancel">Отмена</button>
               </div>
             </div>
+            <div class="set-card glass cat-panel" id="catPanel" hidden>
+              <div class="cat-head">
+                <div class="cat-chips" id="catCats">
+                  <button class="active" data-v="">Все</button><button data-v="m">Парни</button><button data-v="f">Девушки</button><button data-v="cape">С плащом</button>
+                </div>
+                <select class="input sm" id="catStyle"><option value="">Любой стиль</option></select>
+              </div>
+              <div class="cat-grid" id="catGrid"></div>
+              <div class="cat-foot">
+                <span class="muted small" id="catPicked">Выберите скин — он появится на модели слева</span>
+                <div class="row">
+                  <button class="btn primary" id="catSave" disabled><i data-icon="check"></i><span>Сохранить</span></button>
+                  <button class="btn ghost" id="catDone">Готово</button>
+                </div>
+              </div>
+            </div>
             <div class="set-card glass" id="skinCapes" hidden>
               <h4>Плащ</h4>
               <div class="cape-list" id="capeList"></div>
+              <p class="muted small" id="capeNote" hidden style="margin-top:8px">Плащи NLauncher видят игроки NLauncher. Через SkinsRestorer плащ поставить нельзя.</p>
             </div>
             <div class="set-card glass" id="skinServer" hidden>
               <h4>Скин на серверах</h4>

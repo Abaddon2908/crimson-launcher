@@ -477,3 +477,23 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .ed-panel { padding: 16px 18px; }
 .ed-panel .ed-palette { gap: 4px; }
 .ed-panel .btn:not(.sm) { height: 36px; }
+
+/* каталог скинов */
+.cat-panel { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.cat-head { display: flex; flex-direction: column; gap: 8px; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-chips button { height: 30px; padding: 0 12px; border-radius: 9px; background: var(--field); color: var(--muted); font-weight: 600; font-size: 12.5px; transition: .2s; }
+.cat-chips button:hover { color: var(--text); }
+.cat-chips button.active { background: var(--accent); color: #fff; }
+.cat-head select.input.sm { height: 34px; padding: 0 10px; font-size: 13px; }
+.cat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-height: 330px; overflow-y: auto; padding-right: 4px; align-content: start; }
+.cat-tile { position: relative; height: 96px; display: grid; place-items: center; border-radius: 10px; background: var(--field); transition: .15s; outline: 2px solid transparent; }
+.cat-tile:hover { background: var(--field-hover, rgba(255,255,255,.08)); }
+.cat-tile.active { outline-color: var(--accent); background: rgba(163,69,79,.18); }
+.cat-tile canvas { width: 38px; height: 76px; image-rendering: pixelated; opacity: 0; transition: opacity .2s; }
+.cat-tile canvas.ready { opacity: 1; }
+.cat-cape { position: absolute; top: 5px; right: 5px; width: 7px; height: 9px; border-radius: 1px 1px 3px 3px; background: #d6a764; }
+.cat-more { grid-column: 1 / -1; }
+.cat-empty { grid-column: 1 / -1; padding: 24px 0; text-align: center; }
+.cat-foot { display: flex; flex-direction: column; gap: 8px; }
+.cat-foot .muted { min-height: 18px; }

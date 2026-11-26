@@ -137,7 +137,11 @@ app.whenReady().then(() => {
   handle('skin:mojang', (png, variant) => core.skins.applyMojang(png, variant));
   handle('skin:cape', (id) => core.skins.setCape(id));
   handle('skin:reset', () => core.skins.reset(core.config.site));
-  handle('skin:site', (png, variant) => core.skins.uploadSite(core.config.site, png, variant));
+  handle('skin:site', (png, variant, cape) => core.skins.uploadSite(core.config.site, png, variant, cape));
+  handle('skin:catalog', (p) => core.skins.catalog(core.config.site, p));
+  handle('skin:capes', () => core.skins.capes(core.config.site));
+  handle('skin:catalogGet', (url, capeUrl) => core.skins.catalogGet(url, capeUrl));
+  handle('skin:siteCape', (code) => core.skins.siteCape(core.config.site, code));
   createWindow();
 });
 

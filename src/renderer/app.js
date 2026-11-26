@@ -55,6 +55,7 @@ function go(page) {
   if (page === 'instances') renderInstances();
   if (page === 'skin') renderSkin();
   if (page !== 'skin' && editor?.state.on) leaveEditor(false);
+  if (page !== 'skin' && cat.on) setCatalogMode(false);
 }
 $$('.nav-btn').forEach((b) => b.addEventListener('click', () => go(b.dataset.page)));
 document.addEventListener('click', (e) => { const g = e.target.closest('[data-goto]'); if (g) go(g.dataset.goto); });
@@ -565,7 +566,7 @@ function save(p) {
 }
 
 /* ---------------- скин ---------------- */
-const skin = { viewer: null, cur: null, pending: null, variant: 'classic', busy: false };
+const skin = { viewer: null, cur: null, pending: null, pendingCape: undefined, pendingCapeImage: null, siteCapes: [], variant: 'classic', busy: false };
 const DEFAULT_SKIN = 'assets/default-skin.png';
 const SKIN_ANIMS = { idle: () => new skinview3d.IdleAnimation(), walk: () => new skinview3d.WalkingAnimation(), run: () => new skinview3d.RunningAnimation(), wave: () => new skinview3d.WaveAnimation() };
 
@@ -585,8 +586,10 @@ function showSkin(image, variant) {
   if (v) v.loadSkin(image || DEFAULT_SKIN, { model: variant === 'slim' ? 'slim' : 'default' });
 }
 function skinDirty() {
-  const changed = Boolean(skin.pending) || Boolean(skin.cur?.skin && skin.variant !== skin.cur.skin.variant);
+  const changed = Boolean(skin.pending) || Boolean(skin.cur?.skin && skin.variant !== skin.cur.skin.variant)
+    || (skin.cur?.type === 'offline' && skin.pendingCape !== undefined && skin.pendingCape !== (skin.cur.cape || null));
   $('#skinSave').disabled = !changed || skin.busy || !['microsoft', 'offline'].includes(skin.cur?.type);
+  $('#catSave').disabled = $('#skinSave').disabled;
   $('#skinReset').hidden = !changed;
   $('#skinBadge').hidden = !changed;
 }
@@ -603,16 +606,22 @@ function renderSkinPanels() {
     : `${c.name} · ${lic ? 'лицензия: скин ставится в ваш аккаунт Minecraft' : `без лицензии: скин хранится на ${host}`}`;
   $('#skinSave span').textContent = lic ? 'Установить скин' : 'Сохранить скин';
   $('#skinClear').hidden = !c.skin || c.type === 'none';
-  // плащи (только лицензия)
+  // плащи: лицензия — плащи аккаунта; без лицензии — плащи NLauncher (видят игроки NLauncher)
   const capes = c.capes || [];
-  $('#skinCapes').hidden = !lic || !capes.length;
-  const v = skinViewer();
   const activeCape = capes.find((x) => x.active);
-  if (v) { if (lic && activeCape?.image) v.loadCape(activeCape.image); else v.loadCape(null); }
   if (lic) {
+    $('#skinCapes').hidden = !capes.length;
     $('#capeList').innerHTML = [`<button class="cape ${activeCape ? '' : 'active'}" data-cape="">Без плаща</button>`,
       ...capes.map((x) => `<button class="cape ${x.active ? 'active' : ''}" data-cape="${esc(x.id)}">${esc(x.name)}</button>`)].join('');
-  }
+    $('#capeNote').hidden = true;
+  } else if (c.type === 'offline') {
+    $('#skinCapes').hidden = !skin.siteCapes.length;
+    const cur = skin.pendingCape !== undefined ? skin.pendingCape : c.cape;
+    $('#capeList').innerHTML = [`<button class="cape ${cur ? '' : 'active'}" data-cape="">Без плаща</button>`,
+      ...skin.siteCapes.map((x) => `<button class="cape ${x.code === cur ? 'active' : ''}" data-cape="${esc(x.code)}">${esc(x.name)}</button>`)].join('');
+    $('#capeNote').hidden = false;
+  } else $('#skinCapes').hidden = true;
+  showCape();
   // как скин попадает на сервера
   $('#skinServer').hidden = c.type === 'none';
   if (lic) {
@@ -632,9 +641,19 @@ function renderSkinPanels() {
   skinDirty();
 }
 
+/** Плащ на модели: выбранный в каталоге → надетый сейчас */
+function showCape() {
+  const v = skinViewer(); if (!v) return;
+  const c = skin.cur || {};
+  const img = c.type === 'microsoft' ? (c.capes || []).find((x) => x.active)?.image
+    : skin.pendingCape !== undefined ? skin.pendingCapeImage : c.capeImage;
+  v.loadCape(img || null);
+}
+
 async function renderSkin() {
   skinViewer();
-  skin.pending = null;
+  skin.pending = null; skin.pendingCape = undefined; skin.pendingCapeImage = null;
+  if (!skin.siteCapes.length) safe(() => api.skin.capes()).then((l) => { if (l?.length) { skin.siteCapes = l; renderSkinPanels(); } });
   $('#skinSub').textContent = 'Загружаю скин…';
   const c = await safe(() => api.skin.current(), 'Скин: ');
   skin.cur = c || { type: 'none' };
@@ -663,27 +682,31 @@ $('#skinPick').addEventListener('click', async () => {
   skinDirty();
 });
 $('#skinReset').addEventListener('click', () => {
-  skin.pending = null;
+  skin.pending = null; skin.pendingCape = undefined; skin.pendingCapeImage = null;
+  renderSkinPanels();
   setVariant(skin.cur?.skin?.variant || 'classic');
   showSkin(skin.cur?.skin?.image, skin.variant);
   skinDirty();
 });
-$('#skinSave').addEventListener('click', async () => {
+async function saveSkin() {
   const png = skin.pending?.png || skin.cur?.skin?.image?.split(',')[1];
-  if (!png) return toast('Сначала выберите PNG со скином', 'warn');
+  if (!png) return toast('Сначала выберите скин', 'warn');
   skin.busy = true; skinDirty();
-  const label = $('#skinSave span').textContent; $('#skinSave span').textContent = 'Сохраняю…';
-  const r = await safe(() => (skin.cur.type === 'microsoft' ? api.skin.mojang(png, skin.variant) : api.skin.site(png, skin.variant)), 'Скин: ');
-  skin.busy = false; $('#skinSave span').textContent = label;
+  const label = $('#skinSave span').textContent; $('#skinSave span').textContent = 'Сохраняю…'; $('#catSave span').textContent = 'Сохраняю…';
+  const cape = skin.pendingCape !== undefined ? skin.pendingCape : (skin.cur.cape || null);
+  const r = await safe(() => (skin.cur.type === 'microsoft' ? api.skin.mojang(png, skin.variant) : api.skin.site(png, skin.variant, cape)), 'Скин: ');
+  skin.busy = false; $('#skinSave span').textContent = label; $('#catSave span').textContent = 'Сохранить';
   if (r) {
     skin.cur = { ...skin.cur, ...r };
-    skin.pending = null;
+    skin.pending = null; skin.pendingCape = undefined; skin.pendingCapeImage = null;
     toast(skin.cur.type === 'microsoft' ? 'Скин установлен, в игре он появится при следующем входе' : 'Скин сохранён');
     setVariant(skin.cur.skin?.variant || skin.variant);
     showSkin(skin.cur.skin?.image, skin.variant);
     renderSkinPanels();
   } else skinDirty();
-});
+}
+$('#skinSave').addEventListener('click', saveSkin);
+$('#catSave').addEventListener('click', saveSkin);
 $('#skinClear').addEventListener('click', () => {
   const lic = skin.cur?.type === 'microsoft';
   openModal(`<h3>Сбросить скин?</h3>
@@ -742,9 +765,78 @@ async function enterEditor(fromTemplate) {
 }
 $('#skinMode').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.v !== 'catalog' && cat.on) setCatalogMode(false);
   if (b.dataset.v === 'edit' && !editor?.state.on) enterEditor(false);
   if (b.dataset.v === 'view' && editor?.state.on) leaveEditor(false);
+  if (b.dataset.v === 'catalog' && !cat.on) { if (editor?.state.on) leaveEditor(false); setCatalogMode(true); }
 });
+
+/* ---------- каталог скинов с сайта ---------- */
+const cat = { on: false, cat: '', style: '', page: 1, pages: 1, items: [], loading: false, picked: null };
+function setCatalogMode(on) {
+  cat.on = on;
+  $$('#skinMode button').forEach((b) => b.classList.toggle('active', b.dataset.v === (on ? 'catalog' : 'view')));
+  $('#catPanel').hidden = !on;
+  $$('.skin-side > .set-card:not(#catPanel)').forEach((c) => c.classList.toggle('ed-hidden', on));
+  if (on && !cat.items.length) loadCatalog(true);
+}
+// 2D-превью персонажа спереди прямо из PNG (как на сайте)
+function drawFront(c, img, slim) {
+  const x = c.getContext('2d'); x.imageSmoothingEnabled = false; x.clearRect(0, 0, 16, 32);
+  const aw = slim ? 3 : 4, old = img.height === 32;
+  const p = (sx, sy, w, h, dx, dy) => x.drawImage(img, sx, sy, w, h, dx, dy, w, h);
+  p(8, 8, 8, 8, 4, 0); p(20, 20, 8, 12, 4, 8); p(44, 20, aw, 12, 4 - aw, 8); p(4, 20, 4, 12, 4, 20);
+  if (old) { p(44, 20, aw, 12, 12, 8); p(4, 20, 4, 12, 8, 20); } else { p(36, 52, aw, 12, 12, 8); p(20, 52, 4, 12, 8, 20); }
+  p(40, 8, 8, 8, 4, 0);
+  if (!old) { p(20, 36, 8, 12, 4, 8); p(44, 36, aw, 12, 4 - aw, 8); p(52, 52, aw, 12, 12, 8); p(4, 36, 4, 12, 4, 20); p(4, 52, 4, 12, 8, 20); }
+}
+async function loadCatalog(reset) {
+  if (cat.loading) return;
+  if (reset) { cat.page = 1; cat.items = []; $('#catGrid').innerHTML = '<div class="cat-empty muted small">Загружаю каталог…</div>'; }
+  cat.loading = true;
+  const r = await safe(() => api.skin.catalog({ cat: cat.cat, style: cat.style, page: cat.page }), 'Каталог: ');
+  cat.loading = false;
+  if (!r) { if (reset) $('#catGrid').innerHTML = '<div class="cat-empty muted small">Не удалось загрузить каталог. Проверьте интернет.</div>'; return; }
+  if ($('#catStyle').options.length < 2 && r.styles) $('#catStyle').insertAdjacentHTML('beforeend', r.styles.map((s) => `<option>${esc(s)}</option>`).join(''));
+  cat.pages = r.pages; cat.items.push(...r.items);
+  renderCatalog();
+}
+function renderCatalog() {
+  const g = $('#catGrid');
+  if (!cat.items.length) { g.innerHTML = '<div class="cat-empty muted small">Здесь пока пусто</div>'; return; }
+  g.innerHTML = cat.items.map((it) => `<button class="cat-tile ${cat.picked?.id === it.id ? 'active' : ''}" data-id="${it.id}" data-tip="${esc(it.title)}">
+      <canvas width="16" height="32" data-src="${esc(it.url)}" data-slim="${it.variant === 'slim' ? 1 : ''}"></canvas>${it.cape ? '<i class="cat-cape"></i>' : ''}</button>`).join('')
+    + (cat.page < cat.pages ? '<button class="btn ghost sm cat-more" id="catMore">Показать ещё</button>' : '');
+  g.querySelectorAll('canvas[data-src]').forEach((c) => {
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload = () => { drawFront(c, img, c.dataset.slim === '1'); c.classList.add('ready'); };
+    img.src = c.dataset.src;
+  });
+  $('#catMore')?.addEventListener('click', () => { cat.page++; loadCatalog(false); });
+}
+$('#catCats').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  $$('#catCats button').forEach((x) => x.classList.toggle('active', x === b));
+  cat.cat = b.dataset.v; loadCatalog(true);
+});
+$('#catStyle').addEventListener('change', (e) => { cat.style = e.target.value; loadCatalog(true); });
+$('#catGrid').addEventListener('click', async (e) => {
+  const b = e.target.closest('.cat-tile'); if (!b) return;
+  const it = cat.items.find((x) => x.id === Number(b.dataset.id)); if (!it) return;
+  const lic = skin.cur?.type === 'microsoft';
+  $('#catPicked').textContent = 'Загружаю…';
+  const f = await safe(() => api.skin.catalogGet(it.url, lic ? null : it.capeUrl), 'Скин: ');
+  if (!f) { $('#catPicked').textContent = ''; return; }
+  cat.picked = it;
+  $$('#catGrid .cat-tile').forEach((x) => x.classList.toggle('active', x === b));
+  skin.pending = { image: f.image, png: f.png };
+  if (!lic) { skin.pendingCape = it.cape || null; skin.pendingCapeImage = f.capeImage; }
+  setVariant(it.variant === 'slim' ? 'slim' : 'classic');
+  showSkin(f.image, skin.variant); showCape();
+  $('#catPicked').textContent = `${it.title}${it.cape ? (lic ? ' · плащ из каталога доступен только без лицензии' : ' · с плащом') : ''}`;
+  if (!lic) renderSkinPanels(); else skinDirty();
+});
+$('#catDone').addEventListener('click', () => setCatalogMode(false));
 function leaveEditor(apply) {
   if (apply) {
     const r = editor.result();
@@ -787,6 +879,19 @@ $('#edDownload').addEventListener('click', () => {
 
 $('#capeList').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-cape]'); if (!b || b.classList.contains('active')) return;
+  if (skin.cur?.type === 'offline') {
+    const code = b.dataset.cape || null;
+    // скин ещё не сохранён или меняется — плащ уйдёт вместе с ним по кнопке «Сохранить»
+    if (!skin.cur.skin || skin.pending) {
+      skin.pendingCape = code;
+      skin.pendingCapeImage = code ? (await safe(() => api.skin.catalogGet(skin.siteCapes.find((x) => x.code === code).url)))?.image || null : null;
+      renderSkinPanels();
+      return;
+    }
+    const r = await safe(() => api.skin.siteCape(code), 'Плащ: ');
+    if (r) { skin.cur = { ...skin.cur, ...r }; skin.pendingCape = undefined; renderSkinPanels(); toast(code ? 'Плащ надет — его увидят игроки NLauncher' : 'Плащ снят'); }
+    return;
+  }
   const r = await safe(() => api.skin.cape(b.dataset.cape || null), 'Плащ: ');
   if (r) { skin.cur = { ...skin.cur, ...r }; renderSkinPanels(); toast(b.dataset.cape ? 'Плащ надет' : 'Плащ снят'); }
 });
