@@ -748,3 +748,22 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 .skin-cmd .ip-copy { margin: 10px 0; }
 .skin-cmd code { font-size: 12.5px; overflow-wrap: anywhere; white-space: normal; }
 @media (max-width: 860px) { .skin-page { grid-template-columns: minmax(0, 1fr); } }
+
+/* ===== Галерея скинов /skins ===== */
+.skins-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 4px 0 22px; }
+.skins-bar .input { flex: 1 1 220px; max-width: 360px; }
+.skins-bar .chips { margin: 0 0 0 auto; }
+.skin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 14px; }
+.skin-tile { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 12px; }
+.skin-prev { display: grid; place-items: center; height: 190px; border-radius: 12px; background: radial-gradient(closest-side, rgba(163,69,79,.22), transparent), var(--field); transition: .2s; }
+.skin-prev:hover { background: radial-gradient(closest-side, rgba(163,69,79,.34), transparent), var(--field-hover); }
+.skin-prev canvas { width: 80px; height: 160px; image-rendering: pixelated; opacity: 0; transition: opacity .25s, transform .2s; }
+.skin-prev canvas.ready { opacity: 1; }
+.skin-prev:hover canvas { transform: translateY(-3px); }
+.skin-meta { min-width: 0; }
+.skin-meta .nm { display: block; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.skin-meta small { color: var(--muted); font-size: 12.5px; }
+.skin-tile .btn { justify-content: center; }
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 24px 0 0; }
+.skins-how { margin-top: 28px; }
+@media (max-width: 520px) { .skin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .skin-prev { height: 160px; } .skin-prev canvas { width: 66px; height: 132px; } .skins-bar .chips { margin: 0; } }

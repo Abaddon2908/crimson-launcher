@@ -67,6 +67,23 @@ function reset({ nick, token }) {
 
 const png = (code) => db.prepare('SELECT png FROM skins WHERE code = ?').get(String(code))?.png || null;
 const byNick = (nick) => (NICK_RE.test(String(nick || '')) ? db.prepare('SELECT * FROM skin_nicks WHERE nick_lower = ?').get(String(nick).toLowerCase()) : null) || null;
+/** Галерея: новые сверху, поиск по нику, фильтр модели */
+function list({ q = '', model = '', page = 1, per = 48 } = {}) {
+  const where = [], args = [];
+  q = String(q || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 16);
+  if (q) { where.push("nick_lower LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/_/g, '\\_')}%`); }
+  if (model === 'slim' || model === 'classic') { where.push('variant = ?'); args.push(model); }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM skin_nicks ${w}`).get(...args).n;
+  const pages = Math.max(1, Math.ceil(total / per));
+  page = Math.min(Math.max(1, Number(page) || 1), pages);
+  const items = db.prepare(`SELECT nick, code, variant, updated FROM skin_nicks ${w} ORDER BY updated DESC LIMIT ? OFFSET ?`).all(...args, per, (page - 1) * per);
+  return { items, total, page, pages, q, model };
+}
+
+/** Удаление из галереи (модерация): ник освобождается */
+const remove = (nick) => db.prepare('DELETE FROM skin_nicks WHERE nick_lower = ?').run(String(nick || '').toLowerCase()).changes > 0;
+
 const count = () => db.prepare('SELECT COUNT(*) AS n FROM skin_nicks').get().n;
 
-module.exports = { reset, upload, png, byNick, count, checkPng, NICK_RE };
+module.exports = { list, remove, reset, upload, png, byNick, count, checkPng, NICK_RE };

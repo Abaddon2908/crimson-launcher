@@ -359,6 +359,7 @@ app.get('/sitemap.xml', (req, res) => {
     { loc: '/servera/', changefreq: 'daily', priority: '0.8' },
     { loc: '/new', changefreq: 'daily', priority: '0.7' },
     { loc: '/votifier', changefreq: 'monthly', priority: '0.4' },
+    { loc: '/skins', changefreq: 'daily', priority: '0.7' },
   ];
   const tagCounts = {};
   for (const s of topServers({ limit: 5000 })) {
@@ -783,6 +784,10 @@ app.get('/skinapi/textures/:code', (req, res) => {
   if (!b) return res.status(404).send('Not found');
   res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' }).send(Buffer.from(b));
 });
+app.get('/skins', (req, res) => {
+  const r = skins.list({ q: str(req.query.q, 30), model: str(req.query.model, 10), page: int(req.query.page) || 1 });
+  send(res, V.pub.skinsPage(req, r));
+});
 app.get('/skin/:nick', (req, res) => {
   const s = skins.byNick(req.params.nick);
   if (!s) return send(res, V.pub.skinPage(req, { nick: str(req.params.nick, 16) }), 404);
@@ -1202,6 +1207,10 @@ adm.post('/users/:id/verify', (req, res) => {
   db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(id);
   audit(req, 'Подтвердил email вручную', userEmail(id));
   res.redirect(backTo(req, '/admin/users?f=ok'));
+});
+adm.post('/skins/:nick/delete', (req, res) => {
+  skins.remove(req.params.nick);
+  res.redirect('/skins');
 });
 adm.post('/users/:id/delete', (req, res) => {
   const id = int(req.params.id);

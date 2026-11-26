@@ -344,6 +344,50 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
+/** Галерея скинов игроков NLauncher */
+function skinsPage(req, { items, total, page, pages, q, model }) {
+  const qs = (o) => { const p = new URLSearchParams(); const v = { q, model, page: 1, ...o }; if (v.q) p.set('q', v.q); if (v.model) p.set('model', v.model); if (v.page > 1) p.set('page', v.page); const t = p.toString(); return `/skins${t ? `?${t}` : ''}`; };
+  const filtered = Boolean(q || model);
+  return layout(req, {
+    title: page > 1 ? `Скины для Майнкрафт — страница ${page}` : 'Скины для Майнкрафт — скачать скины игроков',
+    description: `Скины игроков NLauncher для Minecraft: ${fmt.plural(total, 'скин', 'скина', 'скинов')}. Смотрите в 3D, скачивайте PNG и ставьте на сервер командой SkinsRestorer.`,
+    canonical: '/skins', noindex: filtered || total === 0,
+    body: html`
+    <section class="page-hero list-hero">
+      <span class="eyebrow">Скины</span>
+      <h1>Скины для Майнкрафт</h1>
+      <p class="muted">Скины игроков NLauncher: ${fmt.plural(total, 'скин', 'скина', 'скинов')}. Откройте любой, чтобы посмотреть его в 3D, скачать PNG или поставить на сервер.</p>
+    </section>
+    <form class="skins-bar" method="get" action="/skins">
+      <input class="input" name="q" value="${q}" placeholder="Ник игрока" maxlength="16" autocomplete="off" />
+      ${model ? html`<input type="hidden" name="model" value="${model}" />` : ''}
+      <button class="btn primary">${icon('search')}Найти</button>
+      <div class="chips">
+        <a class="chip ${!model ? 'active' : ''}" href="${qs({ model: '' })}">Все</a>
+        <a class="chip ${model === 'classic' ? 'active' : ''}" href="${qs({ model: 'classic' })}">Steve</a>
+        <a class="chip ${model === 'slim' ? 'active' : ''}" href="${qs({ model: 'slim' })}">Alex</a>
+      </div>
+    </form>
+    ${items.length ? html`<div class="skin-grid">${items.map((s) => html`
+      <div class="skin-tile card">
+        <a class="skin-prev" href="/skin/${s.nick}" title="Скин ${s.nick} в 3D"><canvas width="16" height="32" data-skin2d="/skins/${s.code}.png" data-slim="${s.variant === 'slim' ? '1' : ''}" aria-label="Скин ${s.nick}"></canvas></a>
+        <div class="skin-meta"><a class="nm" href="/skin/${s.nick}">${s.nick}</a><small>${s.variant === 'slim' ? 'Alex' : 'Steve'} · ${fmt.date(s.updated)}</small></div>
+        <a class="btn ghost sm" href="/skins/${s.code}.png" download="${s.nick}.png" title="Скачать PNG">${icon('download')}PNG</a>
+      </div>`)}</div>
+      ${pages > 1 ? html`<nav class="pager">
+        ${page > 1 ? html`<a class="btn ghost sm" href="${qs({ page: page - 1 })}">← Назад</a>` : ''}
+        <span class="muted">Страница ${page} из ${pages}</span>
+        ${page < pages ? html`<a class="btn ghost sm" href="${qs({ page: page + 1 })}">Дальше →</a>` : ''}
+      </nav>` : ''}`
+    : html`<div class="empty big"><b>${filtered ? 'Ничего не нашлось' : 'Скинов пока нет'}</b>${filtered ? html`Попробуйте другой ник или <a class="link" href="/skins">все скины</a>.` : 'Загрузите свой скин в NLauncher — он появится здесь.'}</div>`}
+    <div class="card pad skins-how">
+      <h2 class="h3">Как добавить свой скин</h2>
+      <p class="muted">Скачайте <a class="link" href="/launcher">NLauncher</a>, откройте вкладку «Скин», выберите PNG или нарисуйте скин прямо на 3D-персонаже и нажмите «Сохранить». Скин появится в галерее под вашим ником, а игроки NLauncher увидят его в игре.</p>
+    </div>
+    <script src="/skin-tiles.js"></script>`,
+  });
+}
+
 function skinPage(req, { nick, s, url, command }) {
   if (!s) {
     return layout(req, {
@@ -379,6 +423,8 @@ function skinPage(req, { nick, s, url, command }) {
           <a class="btn ghost" href="${url}" download="${s.nick}.png">${icon('download')}Скачать PNG</a>
           <a class="btn primary" href="/launcher">Сменить скин в NLauncher</a>
         </div>
+        <p class="muted small" style="margin-top:14px"><a class="link" href="/skins">← Все скины</a></p>
+        ${req.user?.role === 'admin' ? html`<form method="post" action="/admin/skins/${s.nick}/delete" style="margin-top:10px">${csrfField(req)}<button class="btn ghost sm danger" data-confirm="Убрать скин ${s.nick} из галереи? Ник освободится.">Удалить скин (админ)</button></form>` : ''}
       </div>
     </section>
     <script src="/vendor/skinview3d.bundle.js"></script>
@@ -702,4 +748,4 @@ function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
+module.exports = { skinsPage, skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };

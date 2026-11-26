@@ -14,14 +14,28 @@ function hasMod(gameDir) {
   return fs.existsSync(dir) && fs.readdirSync(dir).some((f) => /customskinloader/i.test(f) && !f.endsWith('.disabled'));
 }
 
-/** Источник скинов для CSL: файл в ExtraList, мод сам добавит его в список при запуске */
+/**
+ * Источник скинов для CSL. Мод опрашивает источники из loadlist по очереди и ждёт ответа каждого:
+ * если NLauncher стоит в конце, скин появляется с задержкой (сначала Mojang, LittleSkin и др.).
+ * Поэтому ставим NLauncher первым. До первого запуска мода конфига ещё нет — тогда кладём
+ * файл в ExtraList (мод добавит источник сам), а на следующем запуске поправим порядок.
+ */
 function writeSource(gameDir, site) {
   const root = `${site.replace(/\/$/, '')}/skinapi/`;
+  const entry = { name: 'NLauncher', type: 'CustomSkinAPI', root };
   const cfgFile = path.join(gameDir, 'CustomSkinLoader', 'CustomSkinLoader.json');
-  try { if (fs.readFileSync(cfgFile, 'utf8').includes(root)) return false; } catch { /* мод ещё не запускался */ }
+  let cfg = null;
+  try { cfg = JSON.parse(fs.readFileSync(cfgFile, 'utf8')); } catch { /* мод ещё не запускался или конфиг повреждён */ }
+  if (cfg && Array.isArray(cfg.loadlist)) {
+    const first = cfg.loadlist[0];
+    if (first && first.root === root && first.type === 'CustomSkinAPI') return false;
+    cfg.loadlist = [entry, ...cfg.loadlist.filter((e) => e && e.name !== 'NLauncher' && e.root !== root)];
+    fs.writeFileSync(cfgFile, JSON.stringify(cfg, null, 2));
+    return true;
+  }
   const extra = path.join(gameDir, 'CustomSkinLoader', 'ExtraList');
   fs.mkdirSync(extra, { recursive: true });
-  fs.writeFileSync(path.join(extra, 'NLauncher.json'), JSON.stringify({ name: 'NLauncher', type: 'CustomSkinAPI', root }, null, 2));
+  fs.writeFileSync(path.join(extra, 'NLauncher.json'), JSON.stringify(entry, null, 2));
   return true;
 }
 
@@ -37,7 +51,7 @@ async function ensure(inst, gameDir, site, log) {
       return;
     }
   }
-  if (writeSource(gameDir, site)) log('[NLauncher] Добавлен источник скинов NLauncher');
+  try { if (writeSource(gameDir, site)) log('[NLauncher] Источник скинов NLauncher поставлен первым'); } catch (e) { log(`[NLauncher] Не удалось настроить мод скинов: ${e.message}`); }
 }
 
 module.exports = { ensure, writeSource, hasMod };

@@ -94,7 +94,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
   const img = abs(image || '/assets/og-image.png');
   const metrics = closed && PRIVATE.test(path) && path.startsWith('/admin') ? { html: '', enabled: false } : analytics(s);
   const verify = (name, v) => (/^[\w-]{6,100}$/.test(v || '') ? html`<meta name="${name}" content="${v}" />` : '');
-  const nav = (href, label) => html`<a href="${href}" class="${path === href || (href !== '/' && path.startsWith(href)) ? 'active' : ''}">${label}</a>`;
+  const nav = (href, label) => html`<a href="${href}" class="${path === href || (href !== '/' && path.startsWith(href)) || (href === '/skins' && path.startsWith('/skin/')) ? 'active' : ''}">${label}</a>`;
   return html`<!doctype html>
 <html lang="ru">
 <head>
@@ -142,6 +142,7 @@ function layout(req, { title, body, wide = false, flash = '', description = '', 
         ${nav('/', 'Топ серверов')}
         ${nav('/servera/', 'Подборки')}
         ${nav('/ads', 'Реклама')}
+        ${nav('/skins', 'Скины')}
         ${nav('/stats', 'Статистика')}
         ${nav('/launcher', 'NLauncher')}
       </nav>
