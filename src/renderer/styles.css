@@ -485,7 +485,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .cat-chips button { height: 30px; padding: 0 12px; border-radius: 9px; background: var(--field); color: var(--muted); font-weight: 600; font-size: 12.5px; transition: .2s; }
 .cat-chips button:hover { color: var(--text); }
 .cat-chips button.active { background: var(--accent); color: #fff; }
-.cat-head select.input.sm { height: 34px; padding: 0 10px; font-size: 13px; }
+.cat-head .dd { height: 36px; font-size: 13px; }
 .cat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; max-height: 330px; overflow-y: auto; padding-right: 4px; align-content: start; }
 .cat-tile { position: relative; height: 96px; display: grid; place-items: center; border-radius: 10px; background: var(--field); transition: .15s; outline: 2px solid transparent; }
 .cat-tile:hover { background: var(--field-hover, rgba(255,255,255,.08)); }
