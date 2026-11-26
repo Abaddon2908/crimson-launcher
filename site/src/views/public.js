@@ -344,7 +344,7 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
-const CATS = [['', 'Все'], ['m', 'Парни'], ['f', 'Девушки'], ['cape', 'С плащом'], ['players', 'Скины игроков']];
+const CATS = [['', 'Все скины'], ['mc', 'Скины игроков Minecraft'], ['m', 'Парни'], ['f', 'Девушки'], ['cape', 'С плащом'], ['nl', 'От NLauncher'], ['players', 'Игроки NLauncher']];
 const STYLE_SEO = { 'Повседневные': 'повседневные', 'Спортивные': 'спортивные', 'Деловые': 'деловые', 'Воины': 'рыцари и воины', 'Маги': 'маги и волшебники', 'Ниндзя': 'ниндзя' };
 
 const skinTile = (t) => html`
@@ -358,13 +358,15 @@ const skinTile = (t) => html`
 function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styles, found, recent = [] }) {
   const players = cat === 'players';
   const qs = (o) => { const p = new URLSearchParams(); const v = { q, cat, style, page: 1, ...o }; if (v.q) p.set('q', v.q); if (v.cat) p.set('cat', v.cat); if (v.style && v.cat !== 'players') p.set('style', v.style); if (v.page > 1) p.set('page', v.page); const t = p.toString(); return `/skins${t ? `?${t}` : ''}`; };
-  const catName = { m: 'для парней', f: 'для девушек', cape: 'с плащом', players: 'игроков' }[cat] || '';
+  const catName = { m: 'для парней', f: 'для девушек', cape: 'с плащом', players: 'игроков NLauncher', mc: 'игроков', nl: 'от NLauncher' }[cat] || '';
   const h1 = style ? `Скины ${STYLE_SEO[style]} для Майнкрафт` : cat && !players ? `Скины ${catName} для Майнкрафт` : players ? 'Скины игроков NLauncher' : 'Скины для Майнкрафт';
   const filtered = Boolean(q || page > 1);
   const n = (v) => (v ? html` <i>${v}</i>` : '');
   const tiles = items.map((s) => (players
     ? { href: `/skin/${s.nick}`, title: s.nick, sub: `${s.variant === 'slim' ? 'Alex' : 'Steve'} · ${fmt.date(s.updated)}`, code: s.code, variant: s.variant, dl: `/skins/${s.code}.png`, dlName: `${s.nick}.png` }
-    : { href: `/skins/s/${s.id}`, title: s.title, sub: [s.gender === 'f' ? 'Девушка' : s.gender === 'm' ? 'Парень' : '', s.style].filter(Boolean).join(' · '), code: s.code, variant: s.variant, cape: s.cape_name, dl: `/skins/s/${s.id}/download` }));
+    : s.source === 'mojang' || s.source === 'elyby'
+      ? { href: `/skin/${s.title}`, title: s.title, sub: `Игрок · ${s.source === 'elyby' ? 'Ely.by' : 'лицензия'}`, code: s.code, variant: s.variant, dl: `/skins/${s.code}.png`, dlName: `${s.title}.png` }
+      : { href: `/skins/s/${s.id}`, title: s.title, sub: [s.gender === 'f' ? 'Девушка' : s.gender === 'm' ? 'Парень' : '', s.style].filter(Boolean).join(' · ') || 'NLauncher', code: s.code, variant: s.variant, cape: s.cape_name, dl: `/skins/s/${s.id}/download` }));
   return layout(req, {
     title: page > 1 ? `${h1} — страница ${page}` : `${h1} — скачать бесплатно${players ? '' : ', 3D-просмотр'}`,
     description: players
@@ -377,7 +379,7 @@ function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styl
       <h1>${h1}</h1>
       <p class="muted">${players
         ? html`Скины, которые игроки NLauncher поставили себе: ${fmt.plural(total, 'скин', 'скина', 'скинов')}.`
-        : html`${fmt.plural(counts.all, 'скин', 'скина', 'скинов')} от NLauncher: парни и девушки, рыцари, маги, ниндзя, ${counts.cape} — с плащами. Смотрите в 3D, скачивайте PNG или ставьте в лаунчере в один клик.`}</p>
+        : html`${fmt.plural(counts.all, 'скин', 'скина', 'скинов')}: скины настоящих игроков Minecraft (${counts.mc}) и наши — парни и девушки, рыцари, маги, ниндзя. Каталог пополняется сам, круглосуточно. Смотрите в 3D, скачивайте PNG или ставьте в лаунчере в один клик.`}</p>
     </section>
     <form class="skins-bar" method="get" action="/skins">
       <input class="input" name="q" value="${q}" placeholder="${players ? 'Ник игрока' : 'Ник любого игрока или: маг, рыцарь, худи…'}" maxlength="40" autocomplete="off" />
@@ -393,9 +395,6 @@ function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styl
     <div class="skin-grid">${skinTile({ href: `/skin/${found.nick}`, title: found.nick, sub: found.sourceName, code: found.code, variant: found.variant, dl: `/skins/${found.code}.png`, dlName: `${found.nick}.png` })}</div>
     ${items.length ? html`<h2 class="h3 skin-sec">Из каталога</h2>` : ''}` : ''}
     ${q && !found && !items.length && /^[A-Za-z0-9_]{2,16}$/.test(q) ? html`<p class="muted">Игрок «${q}» не найден или у него стандартный скин.</p>` : ''}
-    ${recent.length ? html`<h2 class="h3 skin-sec">Недавно искали</h2>
-    <div class="skin-grid">${recent.map((l) => skinTile({ href: `/skin/${l.nick}`, title: l.nick, sub: l.source === 'elyby' ? 'Ely.by' : 'Лицензия', code: l.code, variant: l.variant, dl: `/skins/${l.code}.png`, dlName: `${l.nick}.png` }))}</div>
-    <h2 class="h3 skin-sec">Каталог NLauncher</h2>` : ''}
     ${items.length ? html`<div class="skin-grid">${tiles.map(skinTile)}</div>
       ${pages > 1 ? html`<nav class="pager">
         ${page > 1 ? html`<a class="btn ghost sm" href="${qs({ page: page - 1 })}">← Назад</a>` : ''}

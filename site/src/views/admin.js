@@ -415,7 +415,7 @@ function log(req, { list }) {
 }
 
 /** Каталог скинов: загрузка, правка, скрытие */
-function skinsAdmin(req, { items, total, page, pages, q, capes, styles, flash }) {
+function skinsAdmin(req, { items, total, page, pages, q, cat, crawl, capes, styles, flash }) {
   const opt = (v, l, cur) => html`<option value="${v}" ${v === (cur || '') ? 'selected' : ''}>${l}</option>`;
   const back = req.originalUrl;
   return shell(req, '/admin/skins', 'Скины', html`
@@ -433,7 +433,17 @@ function skinsAdmin(req, { items, total, page, pages, q, capes, styles, flash })
       <button class="btn primary" id="skGo" type="button">${icon('plus')}Загрузить</button>
       <p class="muted small" id="skLog"></p>
     </div>
-    <div class="admin-tools">${search('/admin/skins', q, 'Поиск по названию')}<span class="muted">${fmt.plural(total, 'скин', 'скина', 'скинов')} · плащей: ${capes.length}</span></div>
+    <div class="card pad">
+      <h3>Скины игроков Minecraft</h3>
+      <p class="muted small">Сайт сам собирает скины по никам: игроки с серверов мониторинга, поиск на сайте, стартовый список. Около 1800 ников в час — в пределах лимитов Mojang.<br/>
+      Найдено скинов: <b>${crawl.found}</b> · проверено ников: <b>${crawl.checked}</b> · в очереди: <b>${crawl.queue}</b></p>
+      <form method="post" action="/admin/skins/nicks">${csrfField(req)}
+        <label class="field"><span>Добавить ники (через пробел, запятую или с новой строки)</span><textarea class="input" name="nicks" rows="3" placeholder="Notch jeb_ Dinnerbone …"></textarea></label>
+        <button class="btn ghost">${icon('plus')}В очередь</button>
+      </form>
+    </div>
+    <div class="chips" style="margin-top:14px">${[['', 'Все'], ['mc', 'Игроки Minecraft'], ['nl', 'NLauncher']].map(([v, l]) => html`<a class="chip ${(cat || '') === v ? 'active' : ''}" href="/admin/skins${v ? `?cat=${v}` : ''}">${l}</a>`)}</div>
+    <div class="admin-tools">${search('/admin/skins', q, 'Поиск по названию или нику')}<span class="muted">${fmt.plural(total, 'скин', 'скина', 'скинов')} · плащей: ${capes.length}</span></div>
     <div class="sk-admin-grid">${items.map((it) => html`
       <div class="card pad sk-adm ${it.hidden ? 'dim' : ''}">
         <a class="skin-prev" href="/skins/s/${it.id}" target="_blank"><canvas width="16" height="32" data-skin2d="/skins/${it.code}.png" data-slim="${it.variant === 'slim' ? '1' : ''}"></canvas>${it.hidden ? html`<span class="badge">Скрыт</span>` : ''}</a>

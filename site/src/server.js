@@ -13,6 +13,8 @@ const notify = require('./adminNotify');
 const mailer = require('./mailer');
 const skins = require('./skins');
 const skinlookup = require('./skinlookup');
+skinlookup.startCrawler();
+skinlookup.enqueue(require('./skinseed'), 'seed');
 skins.seedCatalog();
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
@@ -807,7 +809,7 @@ app.get('/skinapi/textures/:code', (req, res) => {
   res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' }).send(Buffer.from(b));
 });
 app.get('/skins', async (req, res) => {
-  const cat = ['m', 'f', 'cape', 'players'].includes(req.query.cat) ? req.query.cat : '';
+  const cat = ['m', 'f', 'cape', 'mc', 'nl', 'players'].includes(req.query.cat) ? req.query.cat : '';
   const style = skins.STYLES.includes(req.query.style) ? req.query.style : '';
   const q = str(req.query.q, 40);
   const page = int(req.query.page) || 1;
@@ -820,12 +822,13 @@ app.get('/skins', async (req, res) => {
     if (own) found = { nick: own.nick, code: own.code, variant: own.variant, sourceName: 'NLauncher' };
     else if (l) found = { nick: l.nick, code: l.code, variant: l.variant, sourceName: skinlookup.SOURCE[l.source] };
   }
-  const recent = !q && !cat && !style && page === 1 ? skinlookup.recent(12) : [];
+  const recent = [];
   send(res, V.pub.skinsPage(req, { ...r, cat, style, q, found, recent, counts: skins.counts(), styles: skins.STYLES }));
 });
 app.get('/skins/s/:id', (req, res) => {
   const it = skins.catalogItem(req.params.id);
   if (!it) return send(res, V.pub.message(req, 'Скин не найден', 'Возможно, его убрали из каталога.'), 404);
+  if (it.source === 'mojang' || it.source === 'elyby') return res.redirect(301, `/skin/${encodeURIComponent(it.title)}`);
   const cape = it.cape ? skins.capeByCode(it.cape) : null;
   send(res, V.pub.catalogSkinPage(req, { it, cape, url: abs(`/skins/${it.code}.png`), command: skinCommand(it.code, it.variant), similar: skins.similar(it) }));
 });
@@ -903,6 +906,7 @@ const flashOf = (req) => ({
   mailok: 'Тестовое письмо отправлено на ваш email — проверьте почту (и папку «Спам»)',
   mailoff: '⚠ Сначала заполните сервер SMTP и адрес отправителя и сохраните настройки',
   mailerr: `⚠ Письмо не отправилось: ${str(req.query.e, 200)}`,
+  queued: `Ники в очереди: ${int(req.query.n)}. Скины появятся в каталоге примерно за ${Math.max(1, Math.ceil(int(req.query.n) * 2 / 60))} мин.`,
 }[req.query.f] || '');
 const audit = (req, action, details) => logAdmin(req.user.id, action, details);
 const serverName = (id) => db.prepare('SELECT name FROM servers WHERE id = ?').get(id)?.name || `#${id}`;
@@ -1276,7 +1280,12 @@ adm.post('/skins/:nick/delete', (req, res) => {
 });
 adm.get('/skins', (req, res) => {
   const r = skins.catalogList({ cat: str(req.query.cat, 10), style: str(req.query.style, 30), q: str(req.query.q, 40), page: int(req.query.page) || 1, per: 60, all: true });
-  send(res, V.adm.skinsAdmin(req, { ...r, q: str(req.query.q, 40), capes: skins.capes(), styles: skins.STYLES, flash: flashOf(req) }));
+  send(res, V.adm.skinsAdmin(req, { ...r, q: str(req.query.q, 40), cat: str(req.query.cat, 10), crawl: skinlookup.stats(), capes: skins.capes(), styles: skins.STYLES, flash: flashOf(req) }));
+});
+adm.post('/skins/nicks', (req, res) => {
+  const nicks = String(req.body?.nicks || '').split(/[\s,;]+/).slice(0, 20000);
+  const n = skinlookup.enqueue(nicks, 'admin');
+  res.redirect(`/admin/skins?f=queued&n=${n}`);
 });
 // загрузка по одному файлу (JS на странице отправляет файлы по очереди)
 adm.post('/skins/upload', (req, res) => {

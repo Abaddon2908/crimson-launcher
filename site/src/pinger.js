@@ -15,6 +15,7 @@ async function ping(address) {
       online: 1, players: r.players.online, max: r.players.max,
       motd: r.motd.clean.replace(/\s+/g, ' ').trim().slice(0, 200),
       favicon: r.favicon || '', ping: r.roundTripLatency, version: (r.version.name || '').slice(0, 60),
+      sample: (r.players.sample || []).map((p) => p && p.name).filter(Boolean).slice(0, 20),
     };
   } catch {
     return { online: 0, players: 0, max: 0 };
@@ -31,6 +32,8 @@ async function pingServer(s) {
     db.prepare('UPDATE servers SET online = 0, players = 0, last_ping = ? WHERE id = ?').run(t, s.id);
   }
   db.prepare('INSERT INTO pings (server_id, ts, online, players) VALUES (?, ?, ?, ?)').run(s.id, t, r.online, r.players);
+  // ники из списка игроков (его отдают многие сервера) — в сборщик скинов
+  if (r.sample?.length) require('./skinlookup').enqueue(r.sample, 'server');
   return r;
 }
 

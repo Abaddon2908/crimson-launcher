@@ -109,6 +109,8 @@ function catalogList({ cat = '', style = '', q = '', page = 1, per = 48, all = f
   const where = all ? [] : ['c.hidden = 0'], args = [];
   if (cat === 'm' || cat === 'f') { where.push('c.gender = ?'); args.push(cat); }
   if (cat === 'cape') where.push('c.cape IS NOT NULL');
+  if (cat === 'mc') where.push("c.source IN ('mojang', 'elyby')");
+  if (cat === 'nl') where.push("c.source IN ('nl', 'admin')");
   if (STYLES.includes(style)) { where.push('c.style = ?'); args.push(style); }
   q = String(q || '').trim().toLowerCase().slice(0, 40);
   if (q) { where.push('lower(c.title) LIKE ?'); args.push(`%${q.replace(/[%_]/g, '')}%`); }
@@ -121,8 +123,9 @@ function catalogList({ cat = '', style = '', q = '', page = 1, per = 48, all = f
 }
 const similar = (it, n = 12) => db.prepare(`SELECT * FROM skin_catalog WHERE hidden = 0 AND id != ? AND style = ? ORDER BY (gender = ?) DESC, abs(id - ?) LIMIT ?`).all(it.id, it.style, it.gender, it.id, n);
 const counts = () => {
-  const r = db.prepare(`SELECT COUNT(*) AS all_, SUM(gender = 'm') AS m, SUM(gender = 'f') AS f, SUM(cape IS NOT NULL) AS cape FROM skin_catalog WHERE hidden = 0`).get();
-  return { all: r.all_ || 0, m: r.m || 0, f: r.f || 0, cape: r.cape || 0, players: count() };
+  const r = db.prepare(`SELECT COUNT(*) AS all_, SUM(gender = 'm') AS m, SUM(gender = 'f') AS f, SUM(cape IS NOT NULL) AS cape,
+    SUM(source IN ('mojang', 'elyby')) AS mc, SUM(source IN ('nl', 'admin')) AS nl FROM skin_catalog WHERE hidden = 0`).get();
+  return { all: r.all_ || 0, m: r.m || 0, f: r.f || 0, cape: r.cape || 0, mc: r.mc || 0, nl: r.nl || 0, players: count() };
 };
 
 function addCape({ name, png: buf, slug = '' }) {

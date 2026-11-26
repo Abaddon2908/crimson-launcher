@@ -22,6 +22,15 @@ CREATE TABLE IF NOT EXISTS skin_lookup (
 );
 `);
 
+db.exec(`
+CREATE TABLE IF NOT EXISTS skin_queue (
+  nick_lower TEXT PRIMARY KEY,
+  nick TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT '',     -- откуда ник: server | seed | search | admin
+  added INTEGER NOT NULL
+);
+`);
+
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex').slice(0, 16);
 const UA = { 'User-Agent': 'NLauncher-Monitoring/1.0' };
 
@@ -80,7 +89,7 @@ async function lookup(nick) {
   const job = (async () => {
     let f = null;
     for (const src of [fromMojang, fromEly]) {
-      f = await src(nick).catch((e) => { console.warn(`[skins] ${src.name} ${nick}: ${e.message}`); return undefined; });
+      f = await src(nick).catch((e) => { errors++; console.warn(`[skins] ${src.name} ${nick}: ${e.message}`); return undefined; });
       if (f) break;
     }
     // источники недоступны — отдаём старый кеш, если он есть
@@ -95,14 +104,72 @@ async function lookup(nick) {
     const row = { nick_lower: key, nick: f.nick, source: f.source, code: s.code, cape: s.cape, variant: f.slim ? 'slim' : 'classic', fetched: now() };
     db.prepare(`INSERT INTO skin_lookup (nick_lower, nick, source, code, cape, variant, fetched) VALUES (@nick_lower, @nick, @source, @code, @cape, @variant, @fetched)
       ON CONFLICT(nick_lower) DO UPDATE SET nick = excluded.nick, source = excluded.source, code = excluded.code, cape = excluded.cape, variant = excluded.variant, fetched = excluded.fetched`).run(row);
+    toCatalog(row);
     return row;
   })().finally(() => inflight.delete(key));
   inflight.set(key, job);
   return job;
 }
 
+/** Найденный скин — в общий каталог (дубликаты одинаковых картинок отбрасываются) */
+function toCatalog(row) {
+  if (!row?.code) return;
+  const skins = require('./skins');
+  const png = skins.png(row.code);
+  if (png) skins.addCatalog({ title: row.nick, png: Buffer.from(png), variant: row.variant, source: row.source });
+}
+
+/** Поставить ники в очередь сборщика */
+const QUEUE_MAX = 100000;
+function enqueue(nicks, source = '') {
+  const queued = db.prepare('SELECT COUNT(*) AS n FROM skin_queue').get().n;
+  if (queued >= QUEUE_MAX) return 0;
+  const known = db.prepare('SELECT 1 FROM skin_lookup WHERE nick_lower = ?');
+  const ins = db.prepare('INSERT OR IGNORE INTO skin_queue (nick_lower, nick, source, added) VALUES (?, ?, ?, ?)');
+  let n = 0;
+  for (const raw of nicks) {
+    const nick = String(raw || '').trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(nick) || known.get(nick.toLowerCase())) continue;
+    n += ins.run(nick.toLowerCase(), nick, source, now()).changes;
+    if (queued + n >= QUEUE_MAX) break;
+  }
+  return n;
+}
+
+/**
+ * Фоновый сборщик: по одному нику раз в STEP мс (≈1800 ников в час) — в пределах лимитов Mojang.
+ * Если Mojang отвечает ошибками — делает паузу.
+ */
+const STEP = Number(process.env.SKIN_CRAWL_MS) || 2000;
+let pauseUntil = 0;
+async function crawlOne() {
+  if (Date.now() < pauseUntil) return;
+  const next = db.prepare('SELECT * FROM skin_queue ORDER BY added LIMIT 1').get();
+  if (!next) return;
+  db.prepare('DELETE FROM skin_queue WHERE nick_lower = ?').run(next.nick_lower);
+  const before = errors;
+  const row = await lookup(next.nick).catch(() => null);
+  if (errors > before) pauseUntil = Date.now() + 5 * 60_000; // источник сбоит — отдыхаем 5 минут
+  if (row) toCatalog(row);
+}
+let errors = 0;
+function startCrawler() {
+  if (process.env.SKIN_CRAWL === '0') return;
+  let busy = false;
+  setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try { await crawlOne(); } catch (e) { console.warn('[skins] сборщик:', e.message); } finally { busy = false; }
+  }, STEP).unref();
+}
+const stats = () => ({
+  queue: db.prepare('SELECT COUNT(*) AS n FROM skin_queue').get().n,
+  found: db.prepare(`SELECT COUNT(*) AS n FROM skin_lookup WHERE source != ''`).get().n,
+  checked: db.prepare('SELECT COUNT(*) AS n FROM skin_lookup').get().n,
+});
+
 /** Недавно найденные скины (для блока «Недавно искали») */
 const recent = (n = 12) => db.prepare(`SELECT * FROM skin_lookup WHERE source != '' ORDER BY fetched DESC LIMIT ?`).all(n);
 
 const SOURCE = { mojang: 'Minecraft (лицензия)', elyby: 'Ely.by' };
-module.exports = { lookup, recent, SOURCE, NICK_RE };
+module.exports = { lookup, recent, enqueue, startCrawler, stats, SOURCE, NICK_RE };
