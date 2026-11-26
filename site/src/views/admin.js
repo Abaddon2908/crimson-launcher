@@ -14,6 +14,7 @@ const SECTIONS = [
   ['/admin/products', 'Тарифы', 'tag'],
   ['/admin/coupons', 'Купоны', 'card'],
   ['/admin/support', 'Поддержка', 'chat'],
+  ['/admin/skins', 'Скины', 'shirt'],
   ['/admin/news', 'Новости', 'news'],
   ['/admin/launcher', 'Лаунчер', 'download'],
   ['/admin/users', 'Пользователи', 'users'],
@@ -413,6 +414,48 @@ function log(req, { list }) {
     ${list.length ? '' : html`<div class="empty"><b>Пока пусто</b></div>`}</div>`);
 }
 
+/** Каталог скинов: загрузка, правка, скрытие */
+function skinsAdmin(req, { items, total, page, pages, q, capes, styles, flash }) {
+  const opt = (v, l, cur) => html`<option value="${v}" ${v === (cur || '') ? 'selected' : ''}>${l}</option>`;
+  const back = req.originalUrl;
+  return shell(req, '/admin/skins', 'Скины', html`
+    <div class="card pad">
+      <h3>Добавить в каталог</h3>
+      <p class="muted small">Скины — PNG 64×64, плащи — PNG 64×32. Можно выбрать сразу много файлов: название возьмётся из имени файла, его потом можно поправить. Загружайте только свои скины или те, что разрешено распространять.</p>
+      <div class="grid-form" id="skUp">
+        <label class="field"><span>Что загружаем</span><select class="input" id="skKind"><option value="skin">Скины</option><option value="cape">Плащи</option></select></label>
+        <label class="field sk-only"><span>Модель</span><select class="input" id="skVariant"><option value="classic">Steve (широкие руки)</option><option value="slim">Alex (тонкие руки)</option></select></label>
+        <label class="field sk-only"><span>Для кого</span><select class="input" id="skGender"><option value="">Не указано</option><option value="m">Парни</option><option value="f">Девушки</option></select></label>
+        <label class="field sk-only"><span>Стиль</span><select class="input" id="skStyle"><option value="">Без стиля</option>${styles.map((st) => html`<option>${st}</option>`)}</select></label>
+        <label class="field sk-only"><span>Плащ</span><select class="input" id="skCape"><option value="">Без плаща</option>${capes.map((c) => html`<option value="${c.code}">${c.name}</option>`)}</select></label>
+        <label class="field"><span>Файлы PNG</span><input class="input" type="file" id="skFiles" accept="image/png" multiple /></label>
+      </div>
+      <button class="btn primary" id="skGo" type="button">${icon('plus')}Загрузить</button>
+      <p class="muted small" id="skLog"></p>
+    </div>
+    <div class="admin-tools">${search('/admin/skins', q, 'Поиск по названию')}<span class="muted">${fmt.plural(total, 'скин', 'скина', 'скинов')} · плащей: ${capes.length}</span></div>
+    <div class="sk-admin-grid">${items.map((it) => html`
+      <div class="card pad sk-adm ${it.hidden ? 'dim' : ''}">
+        <a class="skin-prev" href="/skins/s/${it.id}" target="_blank"><canvas width="16" height="32" data-skin2d="/skins/${it.code}.png" data-slim="${it.variant === 'slim' ? '1' : ''}"></canvas>${it.hidden ? html`<span class="badge">Скрыт</span>` : ''}</a>
+        <form method="post" action="/admin/skins/c/${it.id}">${csrfField(req)}<input type="hidden" name="back" value="${back}" />
+          <input class="input sm" name="title" value="${it.title}" maxlength="80" />
+          <div class="row2">
+            <select class="input sm" name="gender">${opt('', '—', it.gender)}${opt('m', 'Парень', it.gender)}${opt('f', 'Девушка', it.gender)}</select>
+            <select class="input sm" name="style">${opt('', 'Без стиля', it.style)}${styles.map((st) => opt(st, st, it.style))}</select>
+          </div>
+          <select class="input sm" name="cape">${opt('', 'Без плаща', it.cape)}${capes.map((c) => opt(c.code, `Плащ: ${c.name}`, it.cape))}</select>
+          <div class="row2"><button class="btn ghost sm">Сохранить</button><span class="muted small">⬇ ${it.downloads}</span></div>
+        </form>
+        <div class="row2">
+          ${btnPost(req, `/admin/skins/c/${it.id}`, it.hidden ? 'Показать' : 'Скрыть', 'ghost', html`<input type="hidden" name="action" value="toggle" /><input type="hidden" name="hidden" value="${it.hidden ? '0' : '1'}" /><input type="hidden" name="back" value="${back}" />`)}
+          ${btnPost(req, `/admin/skins/c/${it.id}`, 'Удалить', 'ghost danger', html`<input type="hidden" name="action" value="delete" /><input type="hidden" name="back" value="${back}" />`, 'Удалить скин из каталога?')}
+        </div>
+      </div>`)}</div>
+    ${pages > 1 ? html`<nav class="pager">${page > 1 ? html`<a class="btn ghost sm" href="/admin/skins?page=${page - 1}${q ? `&q=${encodeURIComponent(q)}` : ''}">←</a>` : ''}<span class="muted">${page} / ${pages}</span>${page < pages ? html`<a class="btn ghost sm" href="/admin/skins?page=${page + 1}${q ? `&q=${encodeURIComponent(q)}` : ''}">→</a>` : ''}</nav>` : ''}
+    <script src="/skin-tiles.js"></script>
+    <script src="/skins-admin.js"></script>`, { flash });
+}
+
 function settingsPage(req, { s, flash, hooks }) {
   const f = (k, label, ph = '', type = 'text') => html`<label class="field"><span>${label}</span><input class="input" type="${type}" name="${k}" value="${s[k] || ''}" placeholder="${ph}" autocomplete="off" /></label>`;
   return shell(req, '/admin/settings', 'Настройки', html`
@@ -587,4 +630,4 @@ function supportThread(req, { t, messages, servers, flash }) {
     <script src="/support-admin.js"></script>`, { flash });
 }
 
-module.exports = { supportList, supportThread, importPage, dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };
+module.exports = { skinsAdmin, supportList, supportThread, importPage, dashboard, servers, serverDetail, grant, orders, products, coupons, news, users, launcherPage, log, settingsPage };

@@ -344,51 +344,126 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
-/** Галерея скинов игроков NLauncher */
-function skinsPage(req, { items, total, page, pages, q, model }) {
-  const qs = (o) => { const p = new URLSearchParams(); const v = { q, model, page: 1, ...o }; if (v.q) p.set('q', v.q); if (v.model) p.set('model', v.model); if (v.page > 1) p.set('page', v.page); const t = p.toString(); return `/skins${t ? `?${t}` : ''}`; };
-  const filtered = Boolean(q || model);
+const CATS = [['', 'Все'], ['m', 'Парни'], ['f', 'Девушки'], ['cape', 'С плащом'], ['players', 'Скины игроков']];
+const STYLE_SEO = { 'Повседневные': 'повседневные', 'Спортивные': 'спортивные', 'Деловые': 'деловые', 'Воины': 'рыцари и воины', 'Маги': 'маги и волшебники', 'Ниндзя': 'ниндзя' };
+
+const skinTile = (t) => html`
+  <div class="skin-tile card">
+    <a class="skin-prev" href="${t.href}" title="${t.title}"><canvas width="16" height="32" data-skin2d="/skins/${t.code}.png" data-slim="${t.variant === 'slim' ? '1' : ''}" aria-label="${t.title}"></canvas>${t.cape ? html`<span class="cape-badge" title="Плащ: ${t.cape}">${icon('flag')}</span>` : ''}</a>
+    <div class="skin-meta"><a class="nm" href="${t.href}">${t.title}</a><small>${t.sub}</small></div>
+    <a class="btn ghost sm" href="${t.dl}" ${t.dlName ? raw(`download="${t.dlName}"`) : ''} rel="nofollow">${icon('download')}PNG</a>
+  </div>`;
+
+/** Каталог скинов NLauncher + скины игроков */
+function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styles }) {
+  const players = cat === 'players';
+  const qs = (o) => { const p = new URLSearchParams(); const v = { q, cat, style, page: 1, ...o }; if (v.q) p.set('q', v.q); if (v.cat) p.set('cat', v.cat); if (v.style && v.cat !== 'players') p.set('style', v.style); if (v.page > 1) p.set('page', v.page); const t = p.toString(); return `/skins${t ? `?${t}` : ''}`; };
+  const catName = { m: 'для парней', f: 'для девушек', cape: 'с плащом', players: 'игроков' }[cat] || '';
+  const h1 = style ? `Скины ${STYLE_SEO[style]} для Майнкрафт` : cat && !players ? `Скины ${catName} для Майнкрафт` : players ? 'Скины игроков NLauncher' : 'Скины для Майнкрафт';
+  const filtered = Boolean(q || page > 1);
+  const n = (v) => (v ? html` <i>${v}</i>` : '');
+  const tiles = items.map((s) => (players
+    ? { href: `/skin/${s.nick}`, title: s.nick, sub: `${s.variant === 'slim' ? 'Alex' : 'Steve'} · ${fmt.date(s.updated)}`, code: s.code, variant: s.variant, dl: `/skins/${s.code}.png`, dlName: `${s.nick}.png` }
+    : { href: `/skins/s/${s.id}`, title: s.title, sub: [s.gender === 'f' ? 'Девушка' : s.gender === 'm' ? 'Парень' : '', s.style].filter(Boolean).join(' · '), code: s.code, variant: s.variant, cape: s.cape_name, dl: `/skins/s/${s.id}/download` }));
   return layout(req, {
-    title: page > 1 ? `Скины для Майнкрафт — страница ${page}` : 'Скины для Майнкрафт — скачать скины игроков',
-    description: `Скины игроков NLauncher для Minecraft: ${fmt.plural(total, 'скин', 'скина', 'скинов')}. Смотрите в 3D, скачивайте PNG и ставьте на сервер командой SkinsRestorer.`,
-    canonical: '/skins', noindex: filtered || total === 0,
+    title: page > 1 ? `${h1} — страница ${page}` : `${h1} — скачать бесплатно${players ? '' : ', 3D-просмотр'}`,
+    description: players
+      ? `Скины игроков NLauncher: ${fmt.plural(total, 'скин', 'скина', 'скинов')}. 3D-просмотр, PNG и команда для SkinsRestorer.`
+      : `${h1}: ${fmt.plural(total, 'скин', 'скина', 'скинов')} в 3D. Скачайте PNG бесплатно или поставьте в один клик в NLauncher — с плащом и без.`,
+    canonical: qs({ q: '', page: 1 }), noindex: filtered || total === 0,
     body: html`
     <section class="page-hero list-hero">
       <span class="eyebrow">Скины</span>
-      <h1>Скины для Майнкрафт</h1>
-      <p class="muted">Скины игроков NLauncher: ${fmt.plural(total, 'скин', 'скина', 'скинов')}. Откройте любой, чтобы посмотреть его в 3D, скачать PNG или поставить на сервер.</p>
+      <h1>${h1}</h1>
+      <p class="muted">${players
+        ? html`Скины, которые игроки NLauncher поставили себе: ${fmt.plural(total, 'скин', 'скина', 'скинов')}.`
+        : html`${fmt.plural(counts.all, 'скин', 'скина', 'скинов')} от NLauncher: парни и девушки, рыцари, маги, ниндзя, ${counts.cape} — с плащами. Смотрите в 3D, скачивайте PNG или ставьте в лаунчере в один клик.`}</p>
     </section>
     <form class="skins-bar" method="get" action="/skins">
-      <input class="input" name="q" value="${q}" placeholder="Ник игрока" maxlength="16" autocomplete="off" />
-      ${model ? html`<input type="hidden" name="model" value="${model}" />` : ''}
+      <input class="input" name="q" value="${q}" placeholder="${players ? 'Ник игрока' : 'Поиск: маг, рыцарь, худи…'}" maxlength="40" autocomplete="off" />
+      ${cat ? html`<input type="hidden" name="cat" value="${cat}" />` : ''}${style && !players ? html`<input type="hidden" name="style" value="${style}" />` : ''}
       <button class="btn primary">${icon('search')}Найти</button>
-      <div class="chips">
-        <a class="chip ${!model ? 'active' : ''}" href="${qs({ model: '' })}">Все</a>
-        <a class="chip ${model === 'classic' ? 'active' : ''}" href="${qs({ model: 'classic' })}">Steve</a>
-        <a class="chip ${model === 'slim' ? 'active' : ''}" href="${qs({ model: 'slim' })}">Alex</a>
-      </div>
     </form>
-    ${items.length ? html`<div class="skin-grid">${items.map((s) => html`
-      <div class="skin-tile card">
-        <a class="skin-prev" href="/skin/${s.nick}" title="Скин ${s.nick} в 3D"><canvas width="16" height="32" data-skin2d="/skins/${s.code}.png" data-slim="${s.variant === 'slim' ? '1' : ''}" aria-label="Скин ${s.nick}"></canvas></a>
-        <div class="skin-meta"><a class="nm" href="/skin/${s.nick}">${s.nick}</a><small>${s.variant === 'slim' ? 'Alex' : 'Steve'} · ${fmt.date(s.updated)}</small></div>
-        <a class="btn ghost sm" href="/skins/${s.code}.png" download="${s.nick}.png" title="Скачать PNG">${icon('download')}PNG</a>
-      </div>`)}</div>
+    <div class="chips skin-cats">${CATS.map(([v, l]) => html`<a class="chip ${cat === v ? 'active' : ''}" href="${qs({ cat: v, style: v === 'players' ? '' : style, q: '' })}">${l}${n(v === '' ? counts.all : counts[v])}</a>`)}</div>
+    ${players ? '' : html`<div class="chips skin-styles">
+      <a class="chip ${!style ? 'active' : ''}" href="${qs({ style: '' })}">Любой стиль</a>
+      ${styles.map((st) => html`<a class="chip ${style === st ? 'active' : ''}" href="${qs({ style: st })}">${st}</a>`)}
+    </div>`}
+    ${items.length ? html`<div class="skin-grid">${tiles.map(skinTile)}</div>
       ${pages > 1 ? html`<nav class="pager">
         ${page > 1 ? html`<a class="btn ghost sm" href="${qs({ page: page - 1 })}">← Назад</a>` : ''}
         <span class="muted">Страница ${page} из ${pages}</span>
         ${page < pages ? html`<a class="btn ghost sm" href="${qs({ page: page + 1 })}">Дальше →</a>` : ''}
       </nav>` : ''}`
-    : html`<div class="empty big"><b>${filtered ? 'Ничего не нашлось' : 'Скинов пока нет'}</b>${filtered ? html`Попробуйте другой ник или <a class="link" href="/skins">все скины</a>.` : 'Загрузите свой скин в NLauncher — он появится здесь.'}</div>`}
+    : html`<div class="empty big"><b>${q ? 'Ничего не нашлось' : 'Скинов пока нет'}</b>${q ? html`Попробуйте другой запрос или <a class="link" href="/skins">все скины</a>.` : players ? 'Поставьте скин в NLauncher — он появится здесь.' : ''}</div>`}
     <div class="card pad skins-how">
-      <h2 class="h3">Как добавить свой скин</h2>
-      <p class="muted">Скачайте <a class="link" href="/launcher">NLauncher</a>, откройте вкладку «Скин», выберите PNG или нарисуйте скин прямо на 3D-персонаже и нажмите «Сохранить». Скин появится в галерее под вашим ником, а игроки NLauncher увидят его в игре.</p>
+      <h2 class="h3">Как поставить скин</h2>
+      <p class="muted"><b>В NLauncher</b> — вкладка «Скин» → «Каталог»: выберите скин и нажмите «Сохранить». Плащ из каталога увидят игроки NLauncher.<br/>
+      <b>На сервере со SkinsRestorer</b> — откройте скин и скопируйте команду <code>/skin url …</code> в чат.<br/>
+      <b>Своя картинка</b> — скачайте PNG и загрузите его в лаунчере или на minecraft.net, если у вас лицензия.</p>
     </div>
     <script src="/skin-tiles.js"></script>`,
   });
 }
 
-function skinPage(req, { nick, s, url, command }) {
+/** Скин из каталога NLauncher */
+function catalogSkinPage(req, { it, cape, url, command, similar }) {
+  const who = it.gender === 'f' ? 'Девушка' : it.gender === 'm' ? 'Парень' : '';
+  return layout(req, {
+    title: `Скин «${it.title}» для Майнкрафт — скачать${cape ? ' с плащом' : ''}`,
+    description: `Скин «${it.title}» для Minecraft${it.style ? ` (${it.style.toLowerCase()})` : ''}${cape ? `, с плащом «${cape.name}»` : ''}. Модель ${it.variant === 'slim' ? 'Alex' : 'Steve'}. 3D-просмотр, PNG и команда для SkinsRestorer.`,
+    canonical: `/skins/s/${it.id}`, image: url,
+    jsonld: [{ '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Скины', item: `${siteUrl()}/skins` },
+      ...(it.style ? [{ '@type': 'ListItem', position: 2, name: it.style, item: `${siteUrl()}/skins?style=${encodeURIComponent(it.style)}` }] : []),
+      { '@type': 'ListItem', position: it.style ? 3 : 2, name: it.title, item: `${siteUrl()}/skins/s/${it.id}` },
+    ] }],
+    body: html`
+    <nav class="crumbs"><a href="/skins">Скины</a>${it.style ? html` / <a href="/skins?style=${encodeURIComponent(it.style)}">${it.style}</a>` : ''} / <span>${it.title}</span></nav>
+    <section class="skin-page">
+      <div class="skin-stage card">
+        <canvas id="skinCanvas" data-skin="${`/skins/${it.code}.png`}" data-slim="${it.variant === 'slim' ? '1' : ''}" data-cape="${cape ? `/capes/${cape.code}.png` : ''}"></canvas>
+        <div class="skin-ctrl">
+          <button class="chip active" data-anim="idle" type="button">Стоит</button>
+          <button class="chip" data-anim="walk" type="button">Идёт</button>
+          <button class="chip" data-anim="run" type="button">Бежит</button>
+          <button class="chip" data-anim="wave" type="button">Машет</button>
+          ${cape ? html`<button class="chip" data-back type="button">Спина</button>` : ''}
+        </div>
+      </div>
+      <div class="skin-info">
+        <span class="eyebrow">Скин NLauncher</span>
+        <h1>${it.title}</h1>
+        <div class="chips" style="margin:8px 0 4px">
+          ${who ? html`<a class="chip" href="/skins?cat=${it.gender}">${who}</a>` : ''}
+          ${it.style ? html`<a class="chip" href="/skins?style=${encodeURIComponent(it.style)}">${it.style}</a>` : ''}
+          <span class="chip">${it.variant === 'slim' ? 'Тонкие руки (Alex)' : 'Широкие руки (Steve)'}</span>
+          ${cape ? html`<a class="chip" href="/skins?cat=cape">Плащ «${cape.name}»</a>` : ''}
+        </div>
+        <div class="card pad skin-cmd">
+          <h2 class="h3">Поставить в NLauncher</h2>
+          <p class="muted small">Вкладка «Скин» → «Каталог» → этот скин → «Сохранить». ${cape ? 'Плащ наденется вместе со скином — его увидят игроки NLauncher.' : ''}</p>
+          <h2 class="h3" style="margin-top:14px">На сервере со SkinsRestorer</h2>
+          <div class="ip-copy" data-copy="${command}" data-copy-msg="Команда скопирована — вставьте её в чат на сервере"><code>${command}</code>${icon('copy')}</div>
+          ${cape ? html`<p class="muted small">Плащ через SkinsRestorer поставить нельзя — его видят только игроки NLauncher.</p>` : ''}
+        </div>
+        <div class="row" style="margin-top:14px">
+          <a class="btn primary" href="/skins/s/${it.id}/download" rel="nofollow">${icon('download')}Скачать скин</a>
+          ${cape ? html`<a class="btn ghost" href="/capes/${cape.code}.png" download="nlauncher-cape-${cape.slug || cape.code}.png" rel="nofollow">${icon('download')}Плащ PNG</a>` : ''}
+          <a class="btn ghost" href="/launcher">NLauncher</a>
+        </div>
+        ${it.downloads ? html`<p class="muted small" style="margin-top:10px">Скачали ${fmt.plural(it.downloads, 'раз', 'раза', 'раз')}</p>` : ''}
+      </div>
+    </section>
+    ${similar.length ? html`<h2 class="h3" style="margin:30px 0 14px">Похожие скины</h2>
+    <div class="skin-grid">${similar.map((s) => skinTile({ href: `/skins/s/${s.id}`, title: s.title, sub: [s.gender === 'f' ? 'Девушка' : s.gender === 'm' ? 'Парень' : '', s.style].filter(Boolean).join(' · '), code: s.code, variant: s.variant, cape: s.cape ? 'есть' : '', dl: `/skins/s/${s.id}/download` }))}</div>
+    <script src="/skin-tiles.js"></script>` : ''}
+    <script src="/vendor/skinview3d.bundle.js"></script>
+    <script src="${'/skin-view.js'}"></script>`,
+  });
+}
+
+function skinPage(req, { nick, s, cape, url, command }) {
   if (!s) {
     return layout(req, {
       title: `Скин ${nick}`, noindex: true,
@@ -401,7 +476,7 @@ function skinPage(req, { nick, s, url, command }) {
     body: html`
     <section class="skin-page">
       <div class="skin-stage card">
-        <canvas id="skinCanvas" data-skin="/skins/${s.code}.png" data-slim="${s.variant === 'slim' ? '1' : ''}"></canvas>
+        <canvas id="skinCanvas" data-skin="/skins/${s.code}.png" data-slim="${s.variant === 'slim' ? '1' : ''}" data-cape="${cape ? `/capes/${cape.code}.png` : ''}"></canvas>
         <div class="skin-ctrl">
           <button class="chip active" data-anim="idle" type="button">Стоит</button>
           <button class="chip" data-anim="walk" type="button">Идёт</button>
@@ -423,7 +498,7 @@ function skinPage(req, { nick, s, url, command }) {
           <a class="btn ghost" href="${url}" download="${s.nick}.png">${icon('download')}Скачать PNG</a>
           <a class="btn primary" href="/launcher">Сменить скин в NLauncher</a>
         </div>
-        <p class="muted small" style="margin-top:14px"><a class="link" href="/skins">← Все скины</a></p>
+        <p class="muted small" style="margin-top:14px"><a class="link" href="/skins?cat=players">← Скины игроков</a> · <a class="link" href="/skins">Каталог скинов</a></p>
         ${req.user?.role === 'admin' ? html`<form method="post" action="/admin/skins/${s.nick}/delete" style="margin-top:10px">${csrfField(req)}<button class="btn ghost sm danger" data-confirm="Убрать скин ${s.nick} из галереи? Ник освободится.">Удалить скин (админ)</button></form>` : ''}
       </div>
     </section>
@@ -748,4 +823,4 @@ function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { skinsPage, skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
+module.exports = { skinsPage, catalogSkinPage, skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };

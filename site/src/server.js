@@ -12,6 +12,7 @@ const support = require('./support');
 const notify = require('./adminNotify');
 const mailer = require('./mailer');
 const skins = require('./skins');
+skins.seedCatalog();
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const yookassa = require('./payments/yookassa');
@@ -759,9 +760,29 @@ const skinCommand = (code, variant) => `/skin url ${abs(`/skins/${code}.png`)}${
 app.post('/api/skins', limiter(60 * 60_000, 30), (req, res) => {
   let buf = null;
   try { buf = Buffer.from(String(req.body?.png || ''), 'base64'); } catch { /* ниже — ошибка */ }
-  const r = skins.upload({ nick: req.body?.nick, variant: req.body?.variant, png: buf, token: req.body?.token });
+  const r = skins.upload({ nick: req.body?.nick, variant: req.body?.variant, png: buf, token: req.body?.token, cape: req.body?.cape || null });
   if (r.error) return res.status(r.status).json({ error: r.error });
-  res.json({ ...r, url: abs(`/skins/${r.code}.png`), page: abs(`/skin/${r.nick}`), command: skinCommand(r.code, r.variant) });
+  res.json({ ...r, url: abs(`/skins/${r.code}.png`), page: abs(`/skin/${r.nick}`), command: skinCommand(r.code, r.variant), capeUrl: r.cape ? abs(`/capes/${r.cape}.png`) : null });
+});
+// плащ игрока без лицензии: { nick, token, cape: код | null }
+app.post('/api/skins/cape', limiter(60 * 60_000, 60), (req, res) => {
+  const r = skins.setCape({ nick: req.body?.nick, token: req.body?.token, cape: req.body?.cape || null });
+  if (r.error) return res.status(r.status).json({ error: r.error });
+  res.json({ ok: true, cape: r.cape, capeUrl: r.cape ? abs(`/capes/${r.cape}.png`) : null });
+});
+// каталог для лаунчера
+const catalogJson = (c) => ({ id: c.id, title: c.title, gender: c.gender, style: c.style, variant: c.variant, url: abs(`/skins/${c.code}.png`), cape: c.cape || null, capeUrl: c.cape ? abs(`/capes/${c.cape}.png`) : null, page: abs(`/skins/s/${c.id}`) });
+app.get('/api/skins/catalog', (req, res) => {
+  const r = skins.catalogList({ cat: str(req.query.cat, 10), style: str(req.query.style, 30), q: str(req.query.q, 40), page: int(req.query.page) || 1, per: Math.min(60, int(req.query.per) || 36) });
+  res.set('Cache-Control', 'public, max-age=120').json({ items: r.items.map(catalogJson), total: r.total, page: r.page, pages: r.pages, styles: skins.STYLES, counts: skins.counts() });
+});
+app.get('/api/capes', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300').json(skins.capes().map((c) => ({ code: c.code, name: c.name, url: abs(`/capes/${c.code}.png`) })));
+});
+app.get('/capes/:code.png', (req, res) => {
+  const b = skins.capePng(req.params.code);
+  if (!b) return res.status(404).send('Not found');
+  res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable', 'Access-Control-Allow-Origin': '*' }).send(Buffer.from(b));
 });
 app.post('/api/skins/reset', limiter(60 * 60_000, 30), (req, res) => {
   const r = skins.reset({ nick: req.body?.nick, token: req.body?.token });
@@ -777,21 +798,38 @@ app.get('/skins/:code.png', (req, res) => {
 app.get('/skinapi/:nick.json', (req, res) => {
   const s = skins.byNick(req.params.nick);
   if (!s) return res.status(404).json({});
-  res.set('Cache-Control', 'public, max-age=60').json({ username: s.nick, skins: { [s.variant === 'slim' ? 'slim' : 'default']: s.code } });
+  res.set('Cache-Control', 'public, max-age=60').json({ username: s.nick, skins: { [s.variant === 'slim' ? 'slim' : 'default']: s.code }, ...(s.cape ? { cape: s.cape } : {}) });
 });
 app.get('/skinapi/textures/:code', (req, res) => {
-  const b = skins.png(req.params.code);
+  const b = skins.png(req.params.code) || skins.capePng(req.params.code);
   if (!b) return res.status(404).send('Not found');
   res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' }).send(Buffer.from(b));
 });
 app.get('/skins', (req, res) => {
-  const r = skins.list({ q: str(req.query.q, 30), model: str(req.query.model, 10), page: int(req.query.page) || 1 });
-  send(res, V.pub.skinsPage(req, r));
+  const cat = ['m', 'f', 'cape', 'players'].includes(req.query.cat) ? req.query.cat : '';
+  const style = skins.STYLES.includes(req.query.style) ? req.query.style : '';
+  const q = str(req.query.q, 40);
+  const page = int(req.query.page) || 1;
+  const r = cat === 'players' ? skins.list({ q, page }) : skins.catalogList({ cat, style, q, page });
+  send(res, V.pub.skinsPage(req, { ...r, cat, style, q, counts: skins.counts(), styles: skins.STYLES }));
+});
+app.get('/skins/s/:id', (req, res) => {
+  const it = skins.catalogItem(req.params.id);
+  if (!it) return send(res, V.pub.message(req, 'Скин не найден', 'Возможно, его убрали из каталога.'), 404);
+  const cape = it.cape ? skins.capeByCode(it.cape) : null;
+  send(res, V.pub.catalogSkinPage(req, { it, cape, url: abs(`/skins/${it.code}.png`), command: skinCommand(it.code, it.variant), similar: skins.similar(it) }));
+});
+app.get('/skins/s/:id/download', (req, res) => {
+  const it = skins.catalogItem(req.params.id);
+  if (!it) return res.status(404).send('Not found');
+  skins.countDownload(it.id);
+  const name = `nlauncher-skin-${it.id}.png`;
+  res.set({ 'Content-Type': 'image/png', 'Content-Disposition': `attachment; filename="${name}"` }).send(Buffer.from(skins.png(it.code)));
 });
 app.get('/skin/:nick', (req, res) => {
   const s = skins.byNick(req.params.nick);
   if (!s) return send(res, V.pub.skinPage(req, { nick: str(req.params.nick, 16) }), 404);
-  send(res, V.pub.skinPage(req, { s, url: abs(`/skins/${s.code}.png`), command: skinCommand(s.code, s.variant) }));
+  send(res, V.pub.skinPage(req, { s, cape: s.cape ? skins.capeByCode(s.cape) : null, url: abs(`/skins/${s.code}.png`), command: skinCommand(s.code, s.variant) }));
 });
 
 /* ======================= Техподдержка (виджет) ======================= */
@@ -1210,7 +1248,29 @@ adm.post('/users/:id/verify', (req, res) => {
 });
 adm.post('/skins/:nick/delete', (req, res) => {
   skins.remove(req.params.nick);
-  res.redirect('/skins');
+  res.redirect('/skins?cat=players');
+});
+adm.get('/skins', (req, res) => {
+  const r = skins.catalogList({ cat: str(req.query.cat, 10), style: str(req.query.style, 30), q: str(req.query.q, 40), page: int(req.query.page) || 1, per: 60, all: true });
+  send(res, V.adm.skinsAdmin(req, { ...r, q: str(req.query.q, 40), capes: skins.capes(), styles: skins.STYLES, flash: flashOf(req) }));
+});
+// загрузка по одному файлу (JS на странице отправляет файлы по очереди)
+adm.post('/skins/upload', (req, res) => {
+  let buf = null;
+  try { buf = Buffer.from(String(req.body?.png || ''), 'base64'); } catch { /* ниже — ошибка */ }
+  const kind = req.body?.kind === 'cape' ? 'cape' : 'skin';
+  const r = kind === 'cape'
+    ? skins.addCape({ name: str(req.body?.title, 60) || 'Плащ', png: buf })
+    : skins.addCatalog({ title: str(req.body?.title, 80) || 'Скин', png: buf, variant: req.body?.variant, gender: req.body?.gender, style: req.body?.style, cape: req.body?.cape || null });
+  if (r.error) return res.status(400).json({ error: r.error });
+  if (r.id || kind === 'cape') audit(req, kind === 'cape' ? 'Каталог: добавлен плащ' : 'Каталог: добавлен скин', r.code);
+  res.json({ ok: true, ...r });
+});
+adm.post('/skins/c/:id', (req, res) => {
+  const b = req.body || {};
+  if (b.action === 'delete') skins.catalogDelete(req.params.id);
+  else skins.catalogSet(req.params.id, b.action === 'toggle' ? { hidden: b.hidden === '1' } : { title: str(b.title, 80), gender: b.gender, style: b.style, cape: b.cape || null });
+  res.redirect(str(b.back, 300).startsWith('/admin/skins') ? str(b.back, 300) : '/admin/skins');
 });
 adm.post('/users/:id/delete', (req, res) => {
   const id = int(req.params.id);

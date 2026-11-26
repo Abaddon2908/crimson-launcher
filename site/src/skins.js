@@ -20,7 +20,38 @@ CREATE TABLE IF NOT EXISTS skin_nicks (
 );
 `);
 
+CREATE_EXTRA();
+function CREATE_EXTRA() {
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS capes (
+    code TEXT PRIMARY KEY,
+    slug TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    png BLOB NOT NULL,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    created INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS skin_catalog (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL REFERENCES skins(code),
+    title TEXT NOT NULL,
+    gender TEXT NOT NULL DEFAULT '',     -- m | f | ''
+    style TEXT NOT NULL DEFAULT '',
+    cape TEXT,                           -- код плаща из capes
+    variant TEXT NOT NULL DEFAULT 'classic',
+    downloads INTEGER NOT NULL DEFAULT 0,
+    hidden INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'admin',
+    created INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS skin_catalog_code ON skin_catalog(code);
+  `);
+  const cols = db.prepare('PRAGMA table_info(skin_nicks)').all().map((c) => c.name);
+  if (!cols.includes('cape')) db.exec('ALTER TABLE skin_nicks ADD COLUMN cape TEXT');
+}
+
 const NICK_RE = /^[A-Za-z0-9_]{3,16}$/;
+const STYLES = ['Повседневные', 'Спортивные', 'Деловые', 'Воины', 'Маги', 'Ниндзя'];
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
 
 /** Проверка PNG: подпись и размер 64×64 (или старый 64×32) */
@@ -36,7 +67,7 @@ function checkPng(buf) {
  * Загрузка скина под ником. token — секрет лаунчера: им ник «закрепляется» за этим игроком.
  * Возвращает { code, token, nick, variant } или { error, status }.
  */
-function upload({ nick, variant, png, token }) {
+function upload({ nick, variant, png, token, cape }) {
   nick = String(nick || '').trim();
   if (!NICK_RE.test(nick)) return { error: 'Ник: 3–16 символов, латиница, цифры и _', status: 400 };
   variant = variant === 'slim' ? 'slim' : 'classic';
@@ -47,13 +78,15 @@ function upload({ nick, variant, png, token }) {
   if (owned && (!tok || sha(tok) !== owned.token_hash)) {
     return { error: 'Этот ник уже занят другим игроком NLauncher. Возьмите другой ник или загрузите скин с того компьютера, где ник был занят.', status: 409 };
   }
+  const capeCode = cape ? (capeByCode(cape) ? String(cape) : undefined) : null;
+  if (capeCode === undefined) return { error: 'Такого плаща нет', status: 400 };
   const newToken = tok || crypto.randomBytes(24).toString('base64url');
   const code = sha(png).slice(0, 16);
   db.prepare('INSERT OR IGNORE INTO skins (code, png, variant, created) VALUES (?, ?, ?, ?)').run(code, png, variant, now());
-  db.prepare(`INSERT INTO skin_nicks (nick_lower, nick, code, variant, token_hash, updated) VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(nick_lower) DO UPDATE SET nick = excluded.nick, code = excluded.code, variant = excluded.variant, updated = excluded.updated`)
-    .run(nick.toLowerCase(), nick, code, variant, sha(newToken), now());
-  return { code, token: newToken, nick, variant };
+  db.prepare(`INSERT INTO skin_nicks (nick_lower, nick, code, variant, token_hash, updated, cape) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(nick_lower) DO UPDATE SET nick = excluded.nick, code = excluded.code, variant = excluded.variant, updated = excluded.updated, cape = excluded.cape`)
+    .run(nick.toLowerCase(), nick, code, variant, sha(newToken), now(), capeCode);
+  return { code, token: newToken, nick, variant, cape: capeCode };
 }
 
 /** Сброс: снять скин с ника (только тот лаунчер, за которым закреплён ник) */
@@ -66,6 +99,88 @@ function reset({ nick, token }) {
 }
 
 const png = (code) => db.prepare('SELECT png FROM skins WHERE code = ?').get(String(code))?.png || null;
+const capeByCode = (code) => db.prepare('SELECT code, slug, name FROM capes WHERE code = ? AND hidden = 0').get(String(code || '')) || null;
+const capePng = (code) => db.prepare('SELECT png FROM capes WHERE code = ?').get(String(code))?.png || null;
+const capes = () => db.prepare('SELECT code, slug, name FROM capes WHERE hidden = 0 ORDER BY rowid').all();
+
+/* ---------- каталог ---------- */
+const catalogItem = (id) => db.prepare('SELECT * FROM skin_catalog WHERE id = ? AND hidden = 0').get(Number(id) || 0) || null;
+function catalogList({ cat = '', style = '', q = '', page = 1, per = 48, all = false } = {}) {
+  const where = all ? [] : ['c.hidden = 0'], args = [];
+  if (cat === 'm' || cat === 'f') { where.push('c.gender = ?'); args.push(cat); }
+  if (cat === 'cape') where.push('c.cape IS NOT NULL');
+  if (STYLES.includes(style)) { where.push('c.style = ?'); args.push(style); }
+  q = String(q || '').trim().toLowerCase().slice(0, 40);
+  if (q) { where.push('lower(c.title) LIKE ?'); args.push(`%${q.replace(/[%_]/g, '')}%`); }
+  const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM skin_catalog c ${w}`).get(...args).n;
+  const pages = Math.max(1, Math.ceil(total / per));
+  page = Math.min(Math.max(1, Number(page) || 1), pages);
+  const items = db.prepare(`SELECT c.*, k.name AS cape_name FROM skin_catalog c LEFT JOIN capes k ON k.code = c.cape ${w} ORDER BY c.id DESC LIMIT ? OFFSET ?`).all(...args, per, (page - 1) * per);
+  return { items, total, page, pages };
+}
+const similar = (it, n = 12) => db.prepare(`SELECT * FROM skin_catalog WHERE hidden = 0 AND id != ? AND style = ? ORDER BY (gender = ?) DESC, abs(id - ?) LIMIT ?`).all(it.id, it.style, it.gender, it.id, n);
+const counts = () => {
+  const r = db.prepare(`SELECT COUNT(*) AS all_, SUM(gender = 'm') AS m, SUM(gender = 'f') AS f, SUM(cape IS NOT NULL) AS cape FROM skin_catalog WHERE hidden = 0`).get();
+  return { all: r.all_ || 0, m: r.m || 0, f: r.f || 0, cape: r.cape || 0, players: count() };
+};
+
+function addCape({ name, png: buf, slug = '' }) {
+  if (!Buffer.isBuffer(buf) || buf.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') return { error: 'Плащ должен быть PNG' };
+  const w = buf.readUInt32BE(16), h = buf.readUInt32BE(20);
+  if (!((w === 64 && h === 32) || (w === 22 && h === 17))) return { error: `Плащ должен быть 64×32 (у файла ${w}×${h})` };
+  const code = sha(buf).slice(0, 16);
+  db.prepare('INSERT OR IGNORE INTO capes (code, slug, name, png, created) VALUES (?, ?, ?, ?, ?)').run(code, slug, String(name || 'Плащ').slice(0, 60), buf, now());
+  return { code };
+}
+
+function addCatalog({ title, png: buf, variant, gender, style, cape, source = 'admin' }) {
+  const err = checkPng(buf);
+  if (err) return { error: err };
+  const code = sha(buf).slice(0, 16);
+  db.prepare('INSERT OR IGNORE INTO skins (code, png, variant, created) VALUES (?, ?, ?, ?)').run(code, buf, variant === 'slim' ? 'slim' : 'classic', now());
+  const r = db.prepare(`INSERT OR IGNORE INTO skin_catalog (code, title, gender, style, cape, variant, source, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(code, String(title || 'Скин').slice(0, 80), ['m', 'f'].includes(gender) ? gender : '', STYLES.includes(style) ? style : '', capeByCode(cape) ? cape : null, variant === 'slim' ? 'slim' : 'classic', source, now());
+  return r.changes ? { id: Number(r.lastInsertRowid), code } : { exists: true, code };
+}
+const catalogSet = (id, fields) => {
+  const f = {};
+  if ('hidden' in fields) f.hidden = fields.hidden ? 1 : 0;
+  if ('title' in fields) f.title = String(fields.title).slice(0, 80);
+  if ('gender' in fields) f.gender = ['m', 'f'].includes(fields.gender) ? fields.gender : '';
+  if ('style' in fields) f.style = STYLES.includes(fields.style) ? fields.style : '';
+  if ('cape' in fields) f.cape = capeByCode(fields.cape) ? fields.cape : null;
+  const keys = Object.keys(f);
+  if (keys.length) db.prepare(`UPDATE skin_catalog SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => f[k]), Number(id));
+};
+const catalogDelete = (id) => db.prepare('DELETE FROM skin_catalog WHERE id = ?').run(Number(id));
+const countDownload = (id) => db.prepare('UPDATE skin_catalog SET downloads = downloads + 1 WHERE id = ?').run(Number(id));
+
+/** Плащ игрока без лицензии (только из каталога плащей) */
+function setCape({ nick, token, cape }) {
+  const owned = byNick(nick);
+  if (!owned) return { error: 'Сначала сохраните скин', status: 404 };
+  if (typeof token !== 'string' || sha(token) !== owned.token_hash) return { error: 'Плащ может сменить только лаунчер, который загрузил скин', status: 403 };
+  const c = cape ? capeByCode(cape) : null;
+  if (cape && !c) return { error: 'Такого плаща нет', status: 400 };
+  db.prepare('UPDATE skin_nicks SET cape = ?, updated = ? WHERE nick_lower = ?').run(c ? c.code : null, now(), owned.nick_lower);
+  return { ok: true, cape: c ? c.code : null };
+}
+
+/** Однократно заливаем фирменный каталог NLauncher (повторно — только при смене версии генератора) */
+const CATALOG_VERSION = '1';
+function seedCatalog() {
+  const { settings } = require('./db');
+  if (settings.get('skin_catalog_v') === CATALOG_VERSION) return;
+  const gen = require('./skingen').catalog();
+  const capeCodes = {};
+  for (const c of gen.capes) capeCodes[c.id] = addCape({ name: c.name, png: c.png, slug: c.id }).code;
+  // перемешиваем (детерминированно), чтобы на первой странице были разные стили
+  const order = gen.skins.map((s) => ({ s, k: sha(s.png) })).sort((a, b) => (a.k < b.k ? -1 : 1)).map((x) => x.s);
+  for (const s of order) addCatalog({ ...s, cape: s.cape ? capeCodes[s.cape] : null, source: 'nl' });
+  settings.set('skin_catalog_v', CATALOG_VERSION);
+  console.log(`[skins] каталог: ${gen.skins.length} скинов, ${gen.capes.length} плащей`);
+}
 const byNick = (nick) => (NICK_RE.test(String(nick || '')) ? db.prepare('SELECT * FROM skin_nicks WHERE nick_lower = ?').get(String(nick).toLowerCase()) : null) || null;
 /** Галерея: новые сверху, поиск по нику, фильтр модели */
 function list({ q = '', model = '', page = 1, per = 48 } = {}) {
@@ -86,4 +201,4 @@ const remove = (nick) => db.prepare('DELETE FROM skin_nicks WHERE nick_lower = ?
 
 const count = () => db.prepare('SELECT COUNT(*) AS n FROM skin_nicks').get().n;
 
-module.exports = { list, remove, reset, upload, png, byNick, count, checkPng, NICK_RE };
+module.exports = { STYLES, capeByCode, capePng, capes, catalogItem, catalogList, similar, counts, addCape, addCatalog, catalogSet, catalogDelete, countDownload, setCape, seedCatalog, list, remove, reset, upload, png, byNick, count, checkPng, NICK_RE };
