@@ -497,3 +497,7 @@ input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer
 .cat-empty { grid-column: 1 / -1; padding: 24px 0; text-align: center; }
 .cat-foot { display: flex; flex-direction: column; gap: 8px; }
 .cat-foot .muted { min-height: 18px; }
+
+.cat-search { display: flex; gap: 6px; }
+.cat-search .input { flex: 1; height: 36px; font-size: 13px; }
+.cat-search .btn { height: 36px; width: 40px; padding: 0; justify-content: center; flex: none; }

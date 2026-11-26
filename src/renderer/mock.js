@@ -38,6 +38,7 @@ if (!window.api) {
         reset: async () => { cur = { ...cur, skin: null, site: null }; return cur; },
         catalog: async () => ({ items: [], total: 0, page: 1, pages: 1, styles: ['Повседневные', 'Воины', 'Маги'] }),
         capes: async () => [],
+        lookup: async () => { throw new Error('Не найден'); },
         catalogGet: async () => ({ image: 'assets/default-skin.png', png: 'x', capeImage: null }),
         siteCape: async () => cur,
         site: async (png, variant) => { await wait(500); cur = { ...cur, skin: { image: 'assets/default-skin.png', variant }, site: { url: 'https://nlauncher.ru/skins/479aa701693db3e7.png', page: 'https://nlauncher.ru/skin/Notch', command: `/skin url https://nlauncher.ru/skins/479aa701693db3e7.png${variant === 'slim' ? ' slim' : ''}` } }; return cur; },

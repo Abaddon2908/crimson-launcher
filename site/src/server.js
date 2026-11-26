@@ -12,6 +12,7 @@ const support = require('./support');
 const notify = require('./adminNotify');
 const mailer = require('./mailer');
 const skins = require('./skins');
+const skinlookup = require('./skinlookup');
 skins.seedCatalog();
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
@@ -805,13 +806,22 @@ app.get('/skinapi/textures/:code', (req, res) => {
   if (!b) return res.status(404).send('Not found');
   res.set({ 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000, immutable' }).send(Buffer.from(b));
 });
-app.get('/skins', (req, res) => {
+app.get('/skins', async (req, res) => {
   const cat = ['m', 'f', 'cape', 'players'].includes(req.query.cat) ? req.query.cat : '';
   const style = skins.STYLES.includes(req.query.style) ? req.query.style : '';
   const q = str(req.query.q, 40);
   const page = int(req.query.page) || 1;
   const r = cat === 'players' ? skins.list({ q, page }) : skins.catalogList({ cat, style, q, page });
-  send(res, V.pub.skinsPage(req, { ...r, cat, style, q, counts: skins.counts(), styles: skins.STYLES }));
+  // запрос похож на ник — ищем скин этого игрока (NLauncher, лицензия, Ely.by)
+  let found = null;
+  if (q && skinlookup.NICK_RE.test(q) && page === 1) {
+    const own = skins.byNick(q);
+    const l = own ? null : await skinlookup.lookup(q).catch(() => null);
+    if (own) found = { nick: own.nick, code: own.code, variant: own.variant, sourceName: 'NLauncher' };
+    else if (l) found = { nick: l.nick, code: l.code, variant: l.variant, sourceName: skinlookup.SOURCE[l.source] };
+  }
+  const recent = !q && !cat && !style && page === 1 ? skinlookup.recent(12) : [];
+  send(res, V.pub.skinsPage(req, { ...r, cat, style, q, found, recent, counts: skins.counts(), styles: skins.STYLES }));
 });
 app.get('/skins/s/:id', (req, res) => {
   const it = skins.catalogItem(req.params.id);
@@ -826,9 +836,23 @@ app.get('/skins/s/:id/download', (req, res) => {
   const name = `nlauncher-skin-${it.id}.png`;
   res.set({ 'Content-Type': 'image/png', 'Content-Disposition': `attachment; filename="${name}"` }).send(Buffer.from(skins.png(it.code)));
 });
-app.get('/skin/:nick', (req, res) => {
+// скин любого игрока по нику: лицензия Minecraft или Ely.by
+const lookupJson = (l) => ({ nick: l.nick, source: l.source, sourceName: skinlookup.SOURCE[l.source], variant: l.variant, url: abs(`/skins/${l.code}.png`), capeUrl: l.cape ? abs(`/skins/${l.cape}.png`) : null, page: abs(`/skin/${l.nick}`) });
+app.get('/api/skins/lookup', limiter(10 * 60_000, 120), async (req, res) => {
+  const nick = str(req.query.nick, 16);
+  const own = skins.byNick(nick);
+  if (own) return res.json({ nick: own.nick, source: 'nlauncher', sourceName: 'NLauncher', variant: own.variant, url: abs(`/skins/${own.code}.png`), capeUrl: own.cape ? abs(`/capes/${own.cape}.png`) : null, page: abs(`/skin/${own.nick}`) });
+  const l = await skinlookup.lookup(nick);
+  if (!l) return res.status(404).json({ error: 'У игрока с таким ником нет своего скина (или ник не найден)' });
+  res.set('Cache-Control', 'public, max-age=600').json(lookupJson(l));
+});
+app.get('/skin/:nick', limiter(10 * 60_000, 200), async (req, res) => {
   const s = skins.byNick(req.params.nick);
-  if (!s) return send(res, V.pub.skinPage(req, { nick: str(req.params.nick, 16) }), 404);
+  if (!s) {
+    const l = await skinlookup.lookup(req.params.nick);
+    if (l) return send(res, V.pub.playerSkinPage(req, { l, sourceName: skinlookup.SOURCE[l.source], url: abs(`/skins/${l.code}.png`), command: skinCommand(l.code, l.variant) }));
+    return send(res, V.pub.skinPage(req, { nick: str(req.params.nick, 16) }), 404);
+  }
   send(res, V.pub.skinPage(req, { s, cape: s.cape ? skins.capeByCode(s.cape) : null, url: abs(`/skins/${s.code}.png`), command: skinCommand(s.code, s.variant) }));
 });
 

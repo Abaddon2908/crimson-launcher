@@ -140,6 +140,7 @@ app.whenReady().then(() => {
   handle('skin:site', (png, variant, cape) => core.skins.uploadSite(core.config.site, png, variant, cape));
   handle('skin:catalog', (p) => core.skins.catalog(core.config.site, p));
   handle('skin:capes', () => core.skins.capes(core.config.site));
+  handle('skin:lookup', (nick) => core.skins.lookup(core.config.site, nick));
   handle('skin:catalogGet', (url, capeUrl) => core.skins.catalogGet(url, capeUrl));
   handle('skin:siteCape', (code) => core.skins.siteCape(core.config.site, code));
   createWindow();

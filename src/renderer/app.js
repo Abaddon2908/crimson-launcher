@@ -814,15 +814,34 @@ function renderCatalog() {
   });
   $('#catMore')?.addEventListener('click', () => { cat.page++; loadCatalog(false); });
 }
+// скин любого игрока по нику
+$('#catSearch').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nick = $('#catNick').value.trim();
+  if (!nick) return loadCatalog(true);
+  if (!/^[A-Za-z0-9_]{2,16}$/.test(nick)) return toast('Ник: латиница, цифры и _, до 16 символов', 'warn');
+  $$('#catCats button').forEach((x) => x.classList.remove('active'));
+  $('#catGrid').innerHTML = '<div class="cat-empty muted small">Ищу скин игрока…</div>';
+  const r = await safe(() => api.skin.lookup(nick));
+  cat.items = r ? [{ id: `n:${r.nick}`, title: `${r.nick} · ${r.sourceName}`, url: r.url, variant: r.variant, cape: null, capeUrl: null }] : [];
+  cat.page = 1; cat.pages = 1;
+  if (r) renderCatalog();
+  else $('#catGrid').innerHTML = `<div class="cat-empty muted small">У игрока «${esc(nick)}» нет своего скина или ник не найден</div>`;
+});
 $('#catCats').addEventListener('click', (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  $('#catNick').value = '';
   $$('#catCats button').forEach((x) => x.classList.toggle('active', x === b));
   cat.cat = b.dataset.v; loadCatalog(true);
 });
-$('#catStyle').addEventListener('change', (e) => { cat.style = e.target.value; loadCatalog(true); });
+$('#catStyle').addEventListener('change', (e) => {
+  cat.style = e.target.value; $('#catNick').value = '';
+  if (!$('#catCats .active')) { cat.cat = ''; $('#catCats button').classList.add('active'); }
+  loadCatalog(true);
+});
 $('#catGrid').addEventListener('click', async (e) => {
   const b = e.target.closest('.cat-tile'); if (!b) return;
-  const it = cat.items.find((x) => x.id === Number(b.dataset.id)); if (!it) return;
+  const it = cat.items.find((x) => String(x.id) === b.dataset.id); if (!it) return;
   const lic = skin.cur?.type === 'microsoft';
   $('#catPicked').textContent = 'Загружаю…';
   const f = await safe(() => api.skin.catalogGet(it.url, lic ? null : it.capeUrl), 'Скин: ');

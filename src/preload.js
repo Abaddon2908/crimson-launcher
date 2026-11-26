@@ -54,6 +54,7 @@ contextBridge.exposeInMainWorld('api', {
     site: (png, variant, cape) => call('skin:site', png, variant, cape),
     catalog: (p) => call('skin:catalog', p),
     capes: () => call('skin:capes'),
+    lookup: (nick) => call('skin:lookup', nick),
     catalogGet: (url, capeUrl) => call('skin:catalogGet', url, capeUrl),
     siteCape: (code) => call('skin:siteCape', code),
   },

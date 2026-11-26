@@ -788,3 +788,5 @@ a.sup-item.unread .sup-main small { color: var(--text); }
 .sk-adm .row2 > * { flex: 1; }
 .sk-adm .row2 form { flex: 1; }
 .sk-adm .row2 form .btn { width: 100%; }
+.skin-sec { margin: 6px 0 12px; }
+.skin-grid + .skin-sec { margin-top: 26px; }

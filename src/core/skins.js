@@ -130,6 +130,8 @@ function catalog(site, p = {}) {
   q.set('per', '36');
   return siteJson(`${siteBase(site)}/api/skins/catalog?${q}`);
 }
+/** Скин любого игрока по нику (NLauncher, лицензия Minecraft, Ely.by) — через сайт */
+const lookup = (site, nick) => siteJson(`${siteBase(site)}/api/skins/lookup?nick=${encodeURIComponent(String(nick || '').trim())}`);
 /** Плащи NLauncher (для игроков без лицензии) */
 const capes = (site) => siteJson(`${siteBase(site)}/api/capes`);
 
@@ -185,4 +187,4 @@ async function reset(site) {
   return current(site);
 }
 
-module.exports = { catalog, capes, catalogGet, siteCape, reset, current, readFile, applyMojang, setCape, uploadSite, checkPng };
+module.exports = { lookup, catalog, capes, catalogGet, siteCape, reset, current, readFile, applyMojang, setCape, uploadSite, checkPng };

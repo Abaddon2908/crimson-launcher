@@ -355,7 +355,7 @@ const skinTile = (t) => html`
   </div>`;
 
 /** Каталог скинов NLauncher + скины игроков */
-function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styles }) {
+function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styles, found, recent = [] }) {
   const players = cat === 'players';
   const qs = (o) => { const p = new URLSearchParams(); const v = { q, cat, style, page: 1, ...o }; if (v.q) p.set('q', v.q); if (v.cat) p.set('cat', v.cat); if (v.style && v.cat !== 'players') p.set('style', v.style); if (v.page > 1) p.set('page', v.page); const t = p.toString(); return `/skins${t ? `?${t}` : ''}`; };
   const catName = { m: 'для парней', f: 'для девушек', cape: 'с плащом', players: 'игроков' }[cat] || '';
@@ -380,7 +380,7 @@ function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styl
         : html`${fmt.plural(counts.all, 'скин', 'скина', 'скинов')} от NLauncher: парни и девушки, рыцари, маги, ниндзя, ${counts.cape} — с плащами. Смотрите в 3D, скачивайте PNG или ставьте в лаунчере в один клик.`}</p>
     </section>
     <form class="skins-bar" method="get" action="/skins">
-      <input class="input" name="q" value="${q}" placeholder="${players ? 'Ник игрока' : 'Поиск: маг, рыцарь, худи…'}" maxlength="40" autocomplete="off" />
+      <input class="input" name="q" value="${q}" placeholder="${players ? 'Ник игрока' : 'Ник любого игрока или: маг, рыцарь, худи…'}" maxlength="40" autocomplete="off" />
       ${cat ? html`<input type="hidden" name="cat" value="${cat}" />` : ''}${style && !players ? html`<input type="hidden" name="style" value="${style}" />` : ''}
       <button class="btn primary">${icon('search')}Найти</button>
     </form>
@@ -389,20 +389,69 @@ function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styl
       <a class="chip ${!style ? 'active' : ''}" href="${qs({ style: '' })}">Любой стиль</a>
       ${styles.map((st) => html`<a class="chip ${style === st ? 'active' : ''}" href="${qs({ style: st })}">${st}</a>`)}
     </div>`}
+    ${found ? html`<h2 class="h3 skin-sec">Скин игрока ${found.nick}</h2>
+    <div class="skin-grid">${skinTile({ href: `/skin/${found.nick}`, title: found.nick, sub: found.sourceName, code: found.code, variant: found.variant, dl: `/skins/${found.code}.png`, dlName: `${found.nick}.png` })}</div>
+    ${items.length ? html`<h2 class="h3 skin-sec">Из каталога</h2>` : ''}` : ''}
+    ${q && !found && !items.length && /^[A-Za-z0-9_]{2,16}$/.test(q) ? html`<p class="muted">Игрок «${q}» не найден или у него стандартный скин.</p>` : ''}
+    ${recent.length ? html`<h2 class="h3 skin-sec">Недавно искали</h2>
+    <div class="skin-grid">${recent.map((l) => skinTile({ href: `/skin/${l.nick}`, title: l.nick, sub: l.source === 'elyby' ? 'Ely.by' : 'Лицензия', code: l.code, variant: l.variant, dl: `/skins/${l.code}.png`, dlName: `${l.nick}.png` }))}</div>
+    <h2 class="h3 skin-sec">Каталог NLauncher</h2>` : ''}
     ${items.length ? html`<div class="skin-grid">${tiles.map(skinTile)}</div>
       ${pages > 1 ? html`<nav class="pager">
         ${page > 1 ? html`<a class="btn ghost sm" href="${qs({ page: page - 1 })}">← Назад</a>` : ''}
         <span class="muted">Страница ${page} из ${pages}</span>
         ${page < pages ? html`<a class="btn ghost sm" href="${qs({ page: page + 1 })}">Дальше →</a>` : ''}
       </nav>` : ''}`
-    : html`<div class="empty big"><b>${q ? 'Ничего не нашлось' : 'Скинов пока нет'}</b>${q ? html`Попробуйте другой запрос или <a class="link" href="/skins">все скины</a>.` : players ? 'Поставьте скин в NLauncher — он появится здесь.' : ''}</div>`}
+    : found ? '' : html`<div class="empty big"><b>${q ? 'Ничего не нашлось' : 'Скинов пока нет'}</b>${q ? html`Попробуйте другой запрос или <a class="link" href="/skins">все скины</a>.` : players ? 'Поставьте скин в NLauncher — он появится здесь.' : ''}</div>`}
     <div class="card pad skins-how">
-      <h2 class="h3">Как поставить скин</h2>
+      <h2 class="h3">Скин любого игрока</h2>
+      <p class="muted">Введите ник в поиск — покажем скин этого игрока: с лицензии Minecraft или с Ely.by. Его можно посмотреть в 3D, скачать или поставить себе. Прямая ссылка: <code>${siteUrl()}/skin/ник</code>.</p>
+      <h2 class="h3" style="margin-top:14px">Как поставить скин</h2>
       <p class="muted"><b>В NLauncher</b> — вкладка «Скин» → «Каталог»: выберите скин и нажмите «Сохранить». Плащ из каталога увидят игроки NLauncher.<br/>
       <b>На сервере со SkinsRestorer</b> — откройте скин и скопируйте команду <code>/skin url …</code> в чат.<br/>
       <b>Своя картинка</b> — скачайте PNG и загрузите его в лаунчере или на minecraft.net, если у вас лицензия.</p>
     </div>
     <script src="/skin-tiles.js"></script>`,
+  });
+}
+
+/** Скин игрока из Minecraft (лицензия) или Ely.by */
+function playerSkinPage(req, { l, sourceName, url, command }) {
+  return layout(req, {
+    title: `Скин ${l.nick} Майнкрафт — скачать, 3D`,
+    description: `Скин игрока ${l.nick} (${sourceName}): 3D-просмотр, скачать PNG, поставить себе в NLauncher или командой SkinsRestorer.`,
+    canonical: `/skin/${l.nick}`, image: url,
+    body: html`
+    <nav class="crumbs"><a href="/skins">Скины</a> / <span>${l.nick}</span></nav>
+    <section class="skin-page">
+      <div class="skin-stage card">
+        <canvas id="skinCanvas" data-skin="/skins/${l.code}.png" data-slim="${l.variant === 'slim' ? '1' : ''}" data-cape="${l.cape ? `/skins/${l.cape}.png` : ''}"></canvas>
+        <div class="skin-ctrl">
+          <button class="chip active" data-anim="idle" type="button">Стоит</button>
+          <button class="chip" data-anim="walk" type="button">Идёт</button>
+          <button class="chip" data-anim="run" type="button">Бежит</button>
+          <button class="chip" data-anim="wave" type="button">Машет</button>
+          ${l.cape ? html`<button class="chip" data-back type="button">Спина</button>` : ''}
+        </div>
+      </div>
+      <div class="skin-info">
+        <span class="eyebrow">Скин игрока · ${sourceName}</span>
+        <h1>${l.nick}</h1>
+        <p class="muted">Модель: ${l.variant === 'slim' ? 'тонкая (Alex)' : 'классическая (Steve)'}${l.cape ? ' · есть плащ' : ''}</p>
+        <div class="card pad skin-cmd">
+          <h2 class="h3">Поставить себе</h2>
+          <p class="muted small">В NLauncher: вкладка «Скин» → «Каталог» → введите ник <b>${l.nick}</b> → «Сохранить». Или на сервере со SkinsRestorer отправьте в чат:</p>
+          <div class="ip-copy" data-copy="${command}" data-copy-msg="Команда скопирована — вставьте её в чат на сервере"><code>${command}</code>${icon('copy')}</div>
+        </div>
+        <div class="row" style="margin-top:14px">
+          <a class="btn primary" href="/skins/${l.code}.png" download="${l.nick}.png" rel="nofollow">${icon('download')}Скачать скин</a>
+          <a class="btn ghost" href="/skins">Все скины</a>
+        </div>
+        <p class="muted small" style="margin-top:12px">Скин принадлежит игроку ${l.nick}. Мы показываем его из открытого API ${sourceName === 'Ely.by' ? 'Ely.by' : 'Minecraft'} и обновляем раз в несколько часов.</p>
+      </div>
+    </section>
+    <script src="/vendor/skinview3d.bundle.js"></script>
+    <script src="${'/skin-view.js'}"></script>`,
   });
 }
 
@@ -823,4 +872,4 @@ function message(req, title, text, status = 200) {
   return layout(req, { title, noindex: true, body: html`<div class="empty big"><b>${title}</b>${text}<br/><br/><a class="btn ghost" href="/">На главную</a></div>` });
 }
 
-module.exports = { skinsPage, catalogSkinPage, skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
+module.exports = { skinsPage, playerSkinPage, catalogSkinPage, skinPage, verifyPage, forgotPage, resetPage, home, server, ads, authForm, launcher, statsPage, listPage, catalog, favorites, votifierPage, serverRows, message, favicon, statusDot, chart };
