@@ -344,7 +344,7 @@ function authForm(req, { mode, error, values = {}, next = '' }) {
   });
 }
 
-const CATS = [['', 'Все скины'], ['mc', 'Скины игроков Minecraft'], ['m', 'Парни'], ['f', 'Девушки'], ['cape', 'С плащом'], ['nl', 'От NLauncher'], ['players', 'Игроки NLauncher']];
+const CATS = [['', 'Все скины'], ['m', 'Парни'], ['f', 'Девушки'], ['cape', 'С плащом'], ['players', 'Игроки NLauncher']];
 const STYLE_SEO = { 'Повседневные': 'повседневные', 'Спортивные': 'спортивные', 'Деловые': 'деловые', 'Воины': 'рыцари и воины', 'Маги': 'маги и волшебники', 'Ниндзя': 'ниндзя' };
 
 const skinTile = (t) => html`
@@ -359,13 +359,13 @@ function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styl
   const players = cat === 'players';
   const qs = (o) => { const p = new URLSearchParams(); const v = { q, cat, style, page: 1, ...o }; if (v.q) p.set('q', v.q); if (v.cat) p.set('cat', v.cat); if (v.style && v.cat !== 'players') p.set('style', v.style); if (v.page > 1) p.set('page', v.page); const t = p.toString(); return `/skins${t ? `?${t}` : ''}`; };
   const catName = { m: 'для парней', f: 'для девушек', cape: 'с плащом', players: 'игроков NLauncher', mc: 'игроков', nl: 'от NLauncher' }[cat] || '';
-  const h1 = style ? `Скины ${STYLE_SEO[style]} для Майнкрафт` : cat && !players ? `Скины ${catName} для Майнкрафт` : players ? 'Скины игроков NLauncher' : 'Скины для Майнкрафт';
+  const h1 = style && STYLE_SEO[style] ? `Скины ${STYLE_SEO[style]} для Майнкрафт` : cat && !players ? `Скины ${catName} для Майнкрафт` : players ? 'Скины игроков NLauncher' : 'Скины для Майнкрафт';
   const filtered = Boolean(q || page > 1);
   const n = (v) => (v ? html` <i>${v}</i>` : '');
   const tiles = items.map((s) => (players
     ? { href: `/skin/${s.nick}`, title: s.nick, sub: `${s.variant === 'slim' ? 'Alex' : 'Steve'} · ${fmt.date(s.updated)}`, code: s.code, variant: s.variant, dl: `/skins/${s.code}.png`, dlName: `${s.nick}.png` }
     : s.source === 'mojang' || s.source === 'elyby'
-      ? { href: `/skin/${s.title}`, title: s.title, sub: `Игрок · ${s.source === 'elyby' ? 'Ely.by' : 'лицензия'}`, code: s.code, variant: s.variant, dl: `/skins/${s.code}.png`, dlName: `${s.title}.png` }
+      ? { href: `/skin/${s.title}`, title: s.title, sub: [s.gender === 'f' ? 'Девушка' : s.gender === 'm' ? 'Парень' : 'Игрок', s.source === 'elyby' ? 'Ely.by' : 'лицензия'].join(' · '), code: s.code, variant: s.variant, cape: s.player_cape ? 'плащ игрока' : '', dl: `/skins/${s.code}.png`, dlName: `${s.title}.png` }
       : { href: `/skins/s/${s.id}`, title: s.title, sub: [s.gender === 'f' ? 'Девушка' : s.gender === 'm' ? 'Парень' : '', s.style].filter(Boolean).join(' · ') || 'NLauncher', code: s.code, variant: s.variant, cape: s.cape_name, dl: `/skins/s/${s.id}/download` }));
   return layout(req, {
     title: page > 1 ? `${h1} — страница ${page}` : `${h1} — скачать бесплатно${players ? '' : ', 3D-просмотр'}`,
@@ -379,18 +379,14 @@ function skinsPage(req, { items, total, page, pages, q, cat, style, counts, styl
       <h1>${h1}</h1>
       <p class="muted">${players
         ? html`Скины, которые игроки NLauncher поставили себе: ${fmt.plural(total, 'скин', 'скина', 'скинов')}.`
-        : html`${fmt.plural(counts.all, 'скин', 'скина', 'скинов')}: скины настоящих игроков Minecraft (${counts.mc}) и наши — парни и девушки, рыцари, маги, ниндзя. Каталог пополняется сам, круглосуточно. Смотрите в 3D, скачивайте PNG или ставьте в лаунчере в один клик.`}</p>
+        : html`${fmt.plural(counts.all, 'скин', 'скина', 'скинов')} настоящих игроков Minecraft — каталог пополняется сам, круглосуточно. Смотрите в 3D, скачивайте PNG или ставьте в лаунчере в один клик.`}</p>
     </section>
     <form class="skins-bar" method="get" action="/skins">
-      <input class="input" name="q" value="${q}" placeholder="${players ? 'Ник игрока' : 'Ник любого игрока или: маг, рыцарь, худи…'}" maxlength="40" autocomplete="off" />
+      <input class="input" name="q" value="${q}" placeholder="Ник игрока" maxlength="40" autocomplete="off" />
       ${cat ? html`<input type="hidden" name="cat" value="${cat}" />` : ''}${style && !players ? html`<input type="hidden" name="style" value="${style}" />` : ''}
       <button class="btn primary">${icon('search')}Найти</button>
     </form>
     <div class="chips skin-cats">${CATS.map(([v, l]) => html`<a class="chip ${cat === v ? 'active' : ''}" href="${qs({ cat: v, style: v === 'players' ? '' : style, q: '' })}">${l}${n(v === '' ? counts.all : counts[v])}</a>`)}</div>
-    ${players ? '' : html`<div class="chips skin-styles">
-      <a class="chip ${!style ? 'active' : ''}" href="${qs({ style: '' })}">Любой стиль</a>
-      ${styles.map((st) => html`<a class="chip ${style === st ? 'active' : ''}" href="${qs({ style: st })}">${st}</a>`)}
-    </div>`}
     ${found ? html`<h2 class="h3 skin-sec">Скин игрока ${found.nick}</h2>
     <div class="skin-grid">${skinTile({ href: `/skin/${found.nick}`, title: found.nick, sub: found.sourceName, code: found.code, variant: found.variant, dl: `/skins/${found.code}.png`, dlName: `${found.nick}.png` })}</div>
     ${items.length ? html`<h2 class="h3 skin-sec">Из каталога</h2>` : ''}` : ''}

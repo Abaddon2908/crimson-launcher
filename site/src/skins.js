@@ -48,6 +48,9 @@ function CREATE_EXTRA() {
   `);
   const cols = db.prepare('PRAGMA table_info(skin_nicks)').all().map((c) => c.name);
   if (!cols.includes('cape')) db.exec('ALTER TABLE skin_nicks ADD COLUMN cape TEXT');
+  // плащ игрока Minecraft / Ely.by (картинка в skins) — только для показа
+  const cc = db.prepare('PRAGMA table_info(skin_catalog)').all().map((c) => c.name);
+  if (!cc.includes('player_cape')) db.exec('ALTER TABLE skin_catalog ADD COLUMN player_cape TEXT');
 }
 
 const NICK_RE = /^[A-Za-z0-9_]{3,16}$/;
@@ -108,7 +111,7 @@ const catalogItem = (id) => db.prepare('SELECT * FROM skin_catalog WHERE id = ? 
 function catalogList({ cat = '', style = '', q = '', page = 1, per = 48, all = false } = {}) {
   const where = all ? [] : ['c.hidden = 0'], args = [];
   if (cat === 'm' || cat === 'f') { where.push('c.gender = ?'); args.push(cat); }
-  if (cat === 'cape') where.push('c.cape IS NOT NULL');
+  if (cat === 'cape') where.push('(c.cape IS NOT NULL OR c.player_cape IS NOT NULL)');
   if (cat === 'mc') where.push("c.source IN ('mojang', 'elyby')");
   if (cat === 'nl') where.push("c.source IN ('nl', 'admin')");
   if (STYLES.includes(style)) { where.push('c.style = ?'); args.push(style); }
@@ -123,7 +126,7 @@ function catalogList({ cat = '', style = '', q = '', page = 1, per = 48, all = f
 }
 const similar = (it, n = 12) => db.prepare(`SELECT * FROM skin_catalog WHERE hidden = 0 AND id != ? AND style = ? ORDER BY (gender = ?) DESC, abs(id - ?) LIMIT ?`).all(it.id, it.style, it.gender, it.id, n);
 const counts = () => {
-  const r = db.prepare(`SELECT COUNT(*) AS all_, SUM(gender = 'm') AS m, SUM(gender = 'f') AS f, SUM(cape IS NOT NULL) AS cape,
+  const r = db.prepare(`SELECT COUNT(*) AS all_, SUM(gender = 'm') AS m, SUM(gender = 'f') AS f, SUM(cape IS NOT NULL OR player_cape IS NOT NULL) AS cape,
     SUM(source IN ('mojang', 'elyby')) AS mc, SUM(source IN ('nl', 'admin')) AS nl FROM skin_catalog WHERE hidden = 0`).get();
   return { all: r.all_ || 0, m: r.m || 0, f: r.f || 0, cape: r.cape || 0, mc: r.mc || 0, nl: r.nl || 0, players: count() };
 };
@@ -137,13 +140,13 @@ function addCape({ name, png: buf, slug = '' }) {
   return { code };
 }
 
-function addCatalog({ title, png: buf, variant, gender, style, cape, source = 'admin' }) {
+function addCatalog({ title, png: buf, variant, gender, style, cape, playerCape = null, source = 'admin' }) {
   const err = checkPng(buf);
   if (err) return { error: err };
   const code = sha(buf).slice(0, 16);
   db.prepare('INSERT OR IGNORE INTO skins (code, png, variant, created) VALUES (?, ?, ?, ?)').run(code, buf, variant === 'slim' ? 'slim' : 'classic', now());
-  const r = db.prepare(`INSERT OR IGNORE INTO skin_catalog (code, title, gender, style, cape, variant, source, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(code, String(title || 'Скин').slice(0, 80), ['m', 'f'].includes(gender) ? gender : '', STYLES.includes(style) ? style : '', capeByCode(cape) ? cape : null, variant === 'slim' ? 'slim' : 'classic', source, now());
+  const r = db.prepare(`INSERT OR IGNORE INTO skin_catalog (code, title, gender, style, cape, player_cape, variant, source, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(code, String(title || 'Скин').slice(0, 80), ['m', 'f'].includes(gender) ? gender : '', STYLES.includes(style) ? style : '', capeByCode(cape) ? cape : null, playerCape || null, variant === 'slim' ? 'slim' : 'classic', source, now());
   return r.changes ? { id: Number(r.lastInsertRowid), code } : { exists: true, code };
 }
 const catalogSet = (id, fields) => {
@@ -170,19 +173,31 @@ function setCape({ nick, token, cape }) {
   return { ok: true, cape: c ? c.code : null };
 }
 
+/** Разметить уже собранные скины игроков: пол по картинке и плащ (один раз после обновления) */
+function backfillPlayers() {
+  const { settings } = require('./db');
+  if (settings.get('skin_players_marked') === '1') return;
+  const { guessGender } = require('./skinguess');
+  const rows = db.prepare(`SELECT c.id, c.code, c.variant, l.cape FROM skin_catalog c LEFT JOIN skin_lookup l ON l.code = c.code
+    WHERE c.source IN ('mojang', 'elyby')`).all();
+  const up = db.prepare('UPDATE skin_catalog SET gender = CASE WHEN gender = \'\' THEN ? ELSE gender END, player_cape = COALESCE(player_cape, ?) WHERE id = ?');
+  for (const r of rows) up.run(guessGender(Buffer.from(png(r.code) || []), r.variant), r.cape || null, r.id);
+  settings.set('skin_players_marked', '1');
+  if (rows.length) console.log(`[skins] размечено скинов игроков: ${rows.length}`);
+}
+
 /** Однократно заливаем фирменный каталог NLauncher (повторно — только при смене версии генератора) */
 const CATALOG_VERSION = '1';
+// Каталог показывает только скины реальных игроков (Mojang / Ely.by) и загруженные админом.
+// Сгенерированные скины NLauncher убраны; плащи NLauncher остаются — их надевают игроки без лицензии.
 function seedCatalog() {
   const { settings } = require('./db');
-  if (settings.get('skin_catalog_v') === CATALOG_VERSION) return;
-  const gen = require('./skingen').catalog();
-  const capeCodes = {};
-  for (const c of gen.capes) capeCodes[c.id] = addCape({ name: c.name, png: c.png, slug: c.id }).code;
-  // перемешиваем (детерминированно), чтобы на первой странице были разные стили
-  const order = gen.skins.map((s) => ({ s, k: sha(s.png) })).sort((a, b) => (a.k < b.k ? -1 : 1)).map((x) => x.s);
-  for (const s of order) addCatalog({ ...s, cape: s.cape ? capeCodes[s.cape] : null, source: 'nl' });
-  settings.set('skin_catalog_v', CATALOG_VERSION);
-  console.log(`[skins] каталог: ${gen.skins.length} скинов, ${gen.capes.length} плащей`);
+  if (settings.get('skin_capes_v') !== CATALOG_VERSION) {
+    for (const c of require('./skingen').CAPES_PNG()) addCape({ name: c.name, png: c.png, slug: c.id });
+    settings.set('skin_capes_v', CATALOG_VERSION);
+  }
+  const gone = db.prepare(`DELETE FROM skin_catalog WHERE source = 'nl'`).run().changes;
+  if (gone) console.log(`[skins] убрано сгенерированных скинов: ${gone}`);
 }
 const byNick = (nick) => (NICK_RE.test(String(nick || '')) ? db.prepare('SELECT * FROM skin_nicks WHERE nick_lower = ?').get(String(nick).toLowerCase()) : null) || null;
 /** Галерея: новые сверху, поиск по нику, фильтр модели */
@@ -204,4 +219,4 @@ const remove = (nick) => db.prepare('DELETE FROM skin_nicks WHERE nick_lower = ?
 
 const count = () => db.prepare('SELECT COUNT(*) AS n FROM skin_nicks').get().n;
 
-module.exports = { STYLES, capeByCode, capePng, capes, catalogItem, catalogList, similar, counts, addCape, addCatalog, catalogSet, catalogDelete, countDownload, setCape, seedCatalog, list, remove, reset, upload, png, byNick, count, checkPng, NICK_RE };
+module.exports = { backfillPlayers, STYLES, capeByCode, capePng, capes, catalogItem, catalogList, similar, counts, addCape, addCatalog, catalogSet, catalogDelete, countDownload, setCape, seedCatalog, list, remove, reset, upload, png, byNick, count, checkPng, NICK_RE };

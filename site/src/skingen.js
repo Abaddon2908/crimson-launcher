@@ -369,4 +369,7 @@ function catalog() {
   return { skins: out, capes };
 }
 
-module.exports = { catalog, png, CAPES };
+/** Только плащи NLauncher */
+const CAPES_PNG = () => CAPES.map((c) => ({ id: c.id, name: c.name, png: cape(c, rng(c.id.length * 977 + c.name.length)) }));
+
+module.exports = { catalog, png, CAPES, CAPES_PNG };

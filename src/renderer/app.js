@@ -797,7 +797,6 @@ async function loadCatalog(reset) {
   const r = await safe(() => api.skin.catalog({ cat: cat.cat, style: cat.style, page: cat.page }), 'Каталог: ');
   cat.loading = false;
   if (!r) { if (reset) $('#catGrid').innerHTML = '<div class="cat-empty muted small">Не удалось загрузить каталог. Проверьте интернет.</div>'; return; }
-  if ($('#catStyle').options.length < 2 && r.styles) $('#catStyle').insertAdjacentHTML('beforeend', r.styles.map((s) => `<option>${esc(s)}</option>`).join(''));
   cat.pages = r.pages; cat.items.push(...r.items);
   renderCatalog();
 }
@@ -834,11 +833,7 @@ $('#catCats').addEventListener('click', (e) => {
   $$('#catCats button').forEach((x) => x.classList.toggle('active', x === b));
   cat.cat = b.dataset.v; loadCatalog(true);
 });
-$('#catStyle').addEventListener('change', (e) => {
-  cat.style = e.target.value; $('#catNick').value = '';
-  if (!$('#catCats .active')) { cat.cat = ''; $('#catCats button').classList.add('active'); }
-  loadCatalog(true);
-});
+
 $('#catGrid').addEventListener('click', async (e) => {
   const b = e.target.closest('.cat-tile'); if (!b) return;
   const it = cat.items.find((x) => String(x.id) === b.dataset.id); if (!it) return;

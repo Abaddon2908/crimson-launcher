@@ -116,7 +116,9 @@ function toCatalog(row) {
   if (!row?.code) return;
   const skins = require('./skins');
   const png = skins.png(row.code);
-  if (png) skins.addCatalog({ title: row.nick, png: Buffer.from(png), variant: row.variant, source: row.source });
+  if (!png) return;
+  const buf = Buffer.from(png);
+  skins.addCatalog({ title: row.nick, png: buf, variant: row.variant, source: row.source, gender: require('./skinguess').guessGender(buf, row.variant), playerCape: row.cape || null });
 }
 
 /** Поставить ники в очередь сборщика */

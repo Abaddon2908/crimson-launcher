@@ -16,6 +16,7 @@ const skinlookup = require('./skinlookup');
 skinlookup.startCrawler();
 skinlookup.enqueue(require('./skinseed'), 'seed');
 skins.seedCatalog();
+skins.backfillPlayers();
 const yoomoney = require('./payments/yoomoney');
 const heleket = require('./payments/heleket');
 const yookassa = require('./payments/yookassa');
